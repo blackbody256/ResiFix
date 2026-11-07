@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: resifix-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: resifix
+      POSTGRES_PASSWORD: resifix
+      POSTGRES_DB: resifix
+    ports:
+      - '5432:5432'
+    volumes:
+      - resifix-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U resifix -d resifix']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  resifix-pgdata:
