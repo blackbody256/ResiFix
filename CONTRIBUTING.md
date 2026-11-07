@@ -4,16 +4,19 @@ Five people are building this in parallel, so most of these rules exist to stop 
 
 ## Who owns what
 
-| Area       | Server folder                    | Client screen                 | Owner        | Backlog                                |
-| ---------- | -------------------------------- | ----------------------------- | ------------ | -------------------------------------- |
-| Auth       | `server/src/features/auth`       | `client/src/screens/login.js` | Ann          | PB-001, PB-002                         |
-| Properties | `server/src/features/properties` | `screens/properties.js`       | Amabe        | PB-003, PB-004                         |
-| Reporting  | `server/src/features/reporting`  | `screens/reporting.js`        | Amabe / Ayan | PB-005..PB-009                         |
-| Tickets    | `server/src/features/tickets`    | `screens/tickets.js`          | Ayan         | PB-010, PB-011, PB-020, PB-022, PB-023 |
-| Custodian  | `server/src/features/custodian`  | `screens/custodian.js`        | Andrew       | PB-012..PB-018, PB-024                 |
-| Completion | `server/src/features/completion` | `screens/completion.js`       | Selina       | PB-019, PB-021, PB-025..PB-029         |
+| Area          | Server module (NestJS)     | Client screen                  | Owner         | Backlog                                |
+| ------------- | -------------------------- | ------------------------------ | ------------- | -------------------------------------- |
+| Auth          | `server/src/auth`          | `client/src/screens/Login.tsx` | Ann           | PB-001, PB-002                         |
+| Properties    | `server/src/properties`    | `screens/Properties.tsx`       | Amabe         | PB-003, PB-004                         |
+| Reporting     | `server/src/reporting`     | `screens/Reporting.tsx`        | Amabe / Ayan  | PB-005..PB-009                         |
+| Tickets       | `server/src/tickets`       | `screens/Tickets.tsx`          | Ayan          | PB-010, PB-011, PB-020, PB-022, PB-023 |
+| Custodian     | `server/src/custodian`     | `screens/Custodian.tsx`        | Andrew        | PB-012..PB-018, PB-024                 |
+| Completion    | `server/src/completion`    | `screens/Completion.tsx`       | Selina        | PB-019, PB-021, PB-025..PB-029         |
+| Notifications | `server/src/notifications` | `client/src/lib/push.ts`       | Ayan / Andrew | PB-023, PB-024                         |
 
-Do your work inside your own feature folder. If you need to change something shared, open a PR for that change on its own.
+Each module's controller has an `// OWNER:` tag and a TODO list of its backlog IDs. Tick an item off in the PR that finishes it.
+
+Do your work inside your own module. If you need to change something shared, open a PR for that change on its own.
 
 ## Shared files: changed only by PR to Ann
 
@@ -21,10 +24,10 @@ These files are the contract between everyone's work. Change them only in a PR a
 
 - `prisma/schema.prisma` and everything in `prisma/migrations/`
 - `docs/api-contract.md` (endpoint shapes, error format)
-- `server/src/lib/ticketStatus.js` (allowed status transitions)
-- `server/src/lib/scope.js`, `server/src/middleware/auth.js`
+- `server/src/common/` (guards, `PropertyScope`, `ticket-status.ts`, error filter)
+- `server/src/auth/guards/`, `server/src/queue/queue.constants.ts`
 
-If you need a new column, open the schema PR first (with its migration) and build your feature on top of it once it is merged.
+If you need a new column, open the schema PR first (with its migration, from `npm run migrate -- --name <change>`) and build your feature on top of it once it is merged.
 
 ## Branches
 
@@ -39,7 +42,7 @@ Branch from `main`, and rebase on `main` before opening a PR. Each branch covers
 ## Pull requests
 
 - Every PR is reviewed and approved by **Ann or Andrew** before merge. Do not merge your own PR.
-- CI must pass: lint, migrations, seed, client build and API smoke test.
+- CI must pass: lint, typecheck, migrations, seed, both builds, the API smoke test and the Docker image builds.
 - Put the backlog ID in the title: `PB-005: Resident can report a fault`.
 - In the description: what changed, how to test it, and screenshots for any UI change.
 
@@ -50,22 +53,22 @@ A backlog item is done when **all** of these are true:
 1. **Meets the acceptance criteria** written on the backlog item.
 2. **Tested**: you exercised the happy path and the main error cases (wrong role, other property's data, bad input). Add automated tests where practical.
 3. **Demoed**: shown working to at least one other teammate, end to end through the client.
-4. Merged to `main` with CI green and the `TODO` line in your routes file ticked off.
+4. Merged to `main` with CI green and the TODO line in your controller ticked off.
 
 ## Running locally
 
-Prerequisites: Node 20.12+ and Docker (or a local PostgreSQL 16).
+Prerequisites: Node 22.12+ and Docker.
 
 ```bash
 cp .env.example .env          # defaults work with docker-compose
-npm install
-npm run db:up                 # Postgres in Docker on :5432
-npm run migrate               # apply migrations + generate Prisma client
+npm install                   # also runs `prisma generate`
+npm run infra:up              # Postgres :5432, Redis :6379, MinIO :9000 (console :9001)
+npm run migrate               # apply migrations
 npm run seed                  # demo hostel, users, fault catalogue
-npm run dev                   # API on :3000, client on http://localhost:5173
+npm run dev                   # API :3000 (with the queue worker inline), app http://localhost:5173
 ```
 
-Log in with any seeded phone number. In development the OTP is always **123456**, and the server also prints it to its log.
+Log in with any seeded phone number. In development the OTP is always **123456**, and the API also prints it to its log.
 
 | Role      | Phone                       |
 | --------- | --------------------------- |
@@ -73,19 +76,33 @@ Log in with any seeded phone number. In development the OTP is always **123456**
 | Admin     | 0700 000 002                |
 | Resident  | 0700 000 010 – 0700 000 013 |
 
-Other scripts: `npm run lint`, `npm run format`, `npm run db:reset` (drop, re-migrate and re-seed), `npm run studio` (Prisma Studio).
+| Command                            | What it does                                                     |
+| ---------------------------------- | ---------------------------------------------------------------- |
+| `npm run lint` / `npm run format`  | ESLint + Prettier check / fix                                    |
+| `npm run typecheck`                | TypeScript for server and client                                 |
+| `npm run build`                    | Build the API (`server/dist`) and the PWA (`client/dist`)        |
+| `npm run start:worker`             | Run the BullMQ worker on its own (set `RUN_WORKER_INLINE=false`) |
+| `npm run db:reset`                 | Drop, re-migrate and re-seed                                     |
+| `npm run studio`                   | Prisma Studio                                                    |
+| `npm run vapid:generate -w server` | Make VAPID keys for Web Push; paste them into `.env`             |
+| `npm run stack:up`                 | Whole stack in Docker behind Nginx at http://localhost:8080      |
 
-## Server conventions
+Web Push only works in a production build (`npm run build -w client && npm run preview -w client`), because the service worker is disabled in `vite dev`.
 
-- **Data isolation.** Every query for property-owned data goes through `scopeToProperty(req.user, query, via?)`, and every create goes through `withProperty(req.user, data)`. Never trust a `propertyId` sent by the client.
-- **Auth.** Put `authenticate` on the router and `requireRole('ADMIN', ...)` on each route that needs it.
-- **Errors.** `throw notFound()`, `throw badRequest(...)` and so on, from `lib/httpError.js`. Express 5 passes thrown errors and rejected promises to the central handler, so routes do not need try/catch.
-- **Validation.** Validate request bodies with zod: `parse(schema, req.body)`.
-- **Status changes.** Use `assertTransition(from, to)`. Record each change with `recordAudit(...)`, inside the same `prisma.$transaction`.
-- **Prisma client.** Use the single client exported from `server/src/db.js`. Never call `new PrismaClient()` anywhere else.
+## Server conventions (NestJS)
 
-## Client conventions
+- **Guards are global.** Every route requires a JWT unless it is marked `@Public()`. Restrict roles with `@Roles(Role.ADMIN, ...)` on the controller or handler. Get the caller with `@CurrentUser()`.
+- **Data isolation.** Take `@Scope() scope: PropertyScope` and pass every property-owned query through it: `where: scope.where<Prisma.TicketWhereInput>({...}, via?)`, `data: scope.data({...})`. Never trust a `propertyId` sent by the client.
+- **Errors.** Throw `notFound()`, `badRequest(...)` and so on from `common/app-exception.ts`, or `notImplemented('PB-0xx')` for a stub. The global filter renders `{ error: { code, message, details } }`.
+- **Validation.** Validate bodies with zod: `@Body(new ZodValidationPipe(Schema)) body: z.infer<typeof Schema>`.
+- **Status changes.** Use `assertTransition(from, to)` from `common/ticket-status.ts`, and record each change with `AuditService.record(..., tx)` inside the same `prisma.$transaction`.
+- **Background work.** Never `setTimeout` in a request. Use `TicketTimersService` (response deadlines, 48-hour auto-close) and `NotificationsService.notify()`; the worker in `server/src/worker/` runs them.
+- **Photos.** Use `StorageService`: store the object key in `Photo.url` and give clients `presignedGetUrl(key)` links, never raw bucket URLs.
+- **Prisma.** Inject `PrismaService`. Never call `new PrismaClient()`.
+- **DI imports.** Import injected classes as values (`import { PrismaService } ...`), not `import type`, or Nest cannot resolve them.
 
-- Call the API only through `client/src/api.js`. It attaches the JWT and handles 401s.
-- Each screen is an `async (el, ctx) => {}` function under `client/src/screens/` and is registered in `client/src/routes.js`.
-- Escape all server data with `escapeHtml()` before putting it into `innerHTML`.
+## Client conventions (React)
+
+- Call the API only through `client/src/lib/api.ts` (or the `useApi` hook). It attaches the JWT and logs the user out on 401.
+- One screen per feature area in `client/src/screens/`, registered in `client/src/features.tsx` with its roles.
+- Style with Tailwind utility classes. Shared building blocks go in `client/src/components/ui.tsx`.
