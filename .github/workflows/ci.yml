@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: resifix
+          POSTGRES_PASSWORD: resifix
+          POSTGRES_DB: resifix_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U resifix -d resifix_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://resifix:resifix@localhost:5432/resifix_ci?schema=public
+      JWT_SECRET: ci-only-secret
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Apply migrations to throwaway Postgres
+        run: npm run migrate:deploy
+
+      - name: Schema and migrations are in sync
+        run: npm run migrate:check
+
+      - name: Seed
+        run: npm run seed
+
+      - name: Build client
+        run: npm run build
+
+      - name: API smoke test
+        run: |
+          npm start &
+          for i in $(seq 1 20); do curl -fs localhost:3000/api/health && break; sleep 1; done
+          curl -fs localhost:3000/api/health
+          curl -fs -X POST localhost:3000/api/auth/request-otp -H 'content-type: application/json' -d '{"phone":"0700000010"}'
+          curl -fs -X POST localhost:3000/api/auth/verify-otp -H 'content-type: application/json' -d '{"phone":"0700000010","code":"123456"}' | grep -q '"token"'
