@@ -1,0 +1,369 @@
+// ResiFix data model.
+// OWNER: Ann. This file and the shared API contract (docs/api-contract.md) change ONLY by PR to Ann.
+// Every change needs a migration: `npm run migrate -- --name <what-changed>`.
+//
+// Data isolation: every row is reachable from exactly one Property. Tables that do not carry
+// propertyId directly are scoped through their parent (Room -> Block -> Property,
+// Photo -> Ticket -> Property, ...). Use scopeToProperty() in server/src/lib/scope.js.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  RESIDENT
+  CUSTODIAN
+  ADMIN
+}
+
+enum TicketStatus {
+  REPORTED
+  REVIEWED
+  SCHEDULED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  STUDENT_CONFIRMED
+  CLOSED
+  REOPENED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum PhotoKind {
+  REPORT // attached by the resident when reporting
+  PROOF // attached by the custodian as repair proof
+}
+
+enum NotificationChannel {
+  IN_APP
+  SMS
+}
+
+// ---------------------------------------------------------------------------
+// Property structure
+// ---------------------------------------------------------------------------
+
+model Property {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  blocks          Block[]
+  users           User[]
+  faultCategories FaultCategory[]
+  responseTargets ResponseTarget[]
+  tickets         Ticket[]
+  auditLogs       AuditLog[]
+}
+
+model Block {
+  id         String   @id @default(cuid())
+  propertyId String
+  name       String
+  createdAt  DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  rooms    Room[]
+
+  @@unique([propertyId, name])
+}
+
+model Room {
+  id        String   @id @default(cuid())
+  blockId   String
+  number    String
+  capacity  Int      @default(1)
+  createdAt DateTime @default(now())
+
+  block       Block       @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  occupancies Occupancy[]
+  tickets     Ticket[]
+
+  @@unique([blockId, number])
+}
+
+// ---------------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------------
+
+model User {
+  id         String   @id @default(cuid())
+  propertyId String
+  phone      String   @unique // E.164, e.g. +256700000001
+  name       String
+  role       Role     @default(RESIDENT)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  property        Property        @relation(fields: [propertyId], references: [id])
+  occupancies     Occupancy[]
+  reportedTickets Ticket[]        @relation("TicketReporter")
+  assignedTickets Ticket[]        @relation("TicketAssignee")
+  photos          Photo[]
+  duplicateLinks  DuplicateLink[]
+  visits          Visit[]
+  repairProofs    RepairProof[]
+  verifications   Verification[]
+  ratings         Rating[]
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+
+  @@index([propertyId, role])
+}
+
+/// Resident <-> Room over time. endDate = null means currently living there.
+model Occupancy {
+  id        String    @id @default(cuid())
+  userId    String
+  roomId    String
+  startDate DateTime  @default(now())
+  endDate   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([roomId])
+}
+
+/// One-time passwords for phone login. Only a hash of the code is stored.
+model OtpChallenge {
+  id         String    @id @default(cuid())
+  phone      String
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Fault catalogue and service levels
+// ---------------------------------------------------------------------------
+
+model FaultCategory {
+  id         String   @id @default(cuid())
+  propertyId String
+  name       String // e.g. Plumbing, Electrical
+  createdAt  DateTime @default(now())
+
+  property        Property         @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  items           FaultItem[]
+  responseTargets ResponseTarget[]
+
+  @@unique([propertyId, name])
+}
+
+model FaultItem {
+  id              String   @id @default(cuid())
+  categoryId      String
+  name            String // e.g. Leaking tap
+  defaultPriority Priority @default(MEDIUM)
+  isActive        Boolean  @default(true)
+
+  category FaultCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  tickets  Ticket[]
+
+  @@unique([categoryId, name])
+}
+
+/// Service-level target. categoryId = null means "applies to every category at this priority".
+model ResponseTarget {
+  id             String   @id @default(cuid())
+  propertyId     String
+  categoryId     String?
+  priority       Priority
+  respondWithinH Int // hours from REPORTED to first visit
+  resolveWithinH Int // hours from REPORTED to COMPLETED
+
+  property Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  category FaultCategory? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, categoryId, priority])
+}
+
+// ---------------------------------------------------------------------------
+// Tickets and their lifecycle
+// ---------------------------------------------------------------------------
+
+model Ticket {
+  id          String       @id @default(cuid())
+  propertyId  String
+  roomId      String
+  reporterId  String
+  faultItemId String
+  assigneeId  String?
+  description String?
+  status      TicketStatus @default(REPORTED)
+  priority    Priority     @default(MEDIUM)
+  reopenCount Int          @default(0)
+  dueAt       DateTime? // derived from ResponseTarget when the ticket is reviewed
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  closedAt    DateTime?
+
+  property  Property  @relation(fields: [propertyId], references: [id])
+  room      Room      @relation(fields: [roomId], references: [id])
+  reporter  User      @relation("TicketReporter", fields: [reporterId], references: [id])
+  assignee  User?     @relation("TicketAssignee", fields: [assigneeId], references: [id])
+  faultItem FaultItem @relation(fields: [faultItemId], references: [id])
+
+  photos        Photo[]
+  duplicatesOf  DuplicateLink[] @relation("DuplicateTicket") // this ticket is the duplicate
+  duplicatedBy  DuplicateLink[] @relation("CanonicalTicket") // this ticket is the original
+  visits        Visit[]
+  repairProofs  RepairProof[]
+  verifications Verification[]
+  rating        Rating?
+  notifications Notification[]
+  auditLogs     AuditLog[]
+
+  @@index([propertyId, status])
+  @@index([assigneeId, status])
+  @@index([roomId])
+}
+
+model Photo {
+  id            String    @id @default(cuid())
+  ticketId      String
+  repairProofId String?
+  uploadedById  String
+  kind          PhotoKind @default(REPORT)
+  url           String
+  createdAt     DateTime  @default(now())
+
+  ticket      Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  repairProof RepairProof? @relation(fields: [repairProofId], references: [id], onDelete: SetNull)
+  uploadedBy  User         @relation(fields: [uploadedById], references: [id])
+
+  @@index([ticketId])
+}
+
+/// Marks `ticket` as a duplicate of `canonical`.
+model DuplicateLink {
+  id          String   @id @default(cuid())
+  ticketId    String
+  canonicalId String
+  linkedById  String
+  createdAt   DateTime @default(now())
+
+  ticket    Ticket @relation("DuplicateTicket", fields: [ticketId], references: [id], onDelete: Cascade)
+  canonical Ticket @relation("CanonicalTicket", fields: [canonicalId], references: [id], onDelete: Cascade)
+  linkedBy  User   @relation(fields: [linkedById], references: [id])
+
+  @@unique([ticketId, canonicalId])
+}
+
+model Visit {
+  id          String    @id @default(cuid())
+  ticketId    String
+  custodianId String
+  scheduledAt DateTime
+  arrivedAt   DateTime?
+  missed      Boolean   @default(false)
+  notes       String?
+  createdAt   DateTime  @default(now())
+
+  ticket    Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  custodian User   @relation(fields: [custodianId], references: [id])
+
+  @@index([ticketId])
+  @@index([custodianId, scheduledAt])
+}
+
+model RepairProof {
+  id            String   @id @default(cuid())
+  ticketId      String
+  submittedById String
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  ticket      Ticket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  submittedBy User    @relation(fields: [submittedById], references: [id])
+  photos      Photo[]
+
+  @@index([ticketId])
+}
+
+/// Resident's confirm/dispute of a completed repair. A dispute reopens the ticket.
+model Verification {
+  id        String   @id @default(cuid())
+  ticketId  String
+  userId    String
+  confirmed Boolean
+  comment   String?
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([ticketId])
+}
+
+model Rating {
+  id        String   @id @default(cuid())
+  ticketId  String   @unique
+  userId    String
+  score     Int // 1..5, validated in the API
+  comment   String?
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  ticketId  String?
+  channel   NotificationChannel @default(IN_APP)
+  message   String
+  sentAt    DateTime?
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ticket Ticket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+
+  @@index([userId, readAt])
+}
+
+/// Append-only. Write through recordAudit() in server/src/lib/audit.js.
+model AuditLog {
+  id         String        @id @default(cuid())
+  propertyId String
+  actorId    String?
+  ticketId   String?
+  action     String // e.g. ticket.status_changed, auth.login
+  fromStatus TicketStatus?
+  toStatus   TicketStatus?
+  meta       Json?
+  createdAt  DateTime      @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  actor    User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  ticket   Ticket?  @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+
+  @@index([propertyId, createdAt])
+  @@index([ticketId])
+}
