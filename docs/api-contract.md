@@ -1,6 +1,7 @@
 # ResiFix API contract
 
 > Shared contract: change only by PR to Ann. Add your endpoint here **in the same PR** that implements it.
+> The [shared API contract doc](https://claude.ai/artifact/Xzq6Y8Ays5yDGKPZkLwp5s) mirrors this file and adds proposed shapes and a build status for each endpoint still to be built.
 
 Base path: `/api`. JSON in and out. Every route needs `Authorization: Bearer <jwt>` unless marked **public** below.
 
