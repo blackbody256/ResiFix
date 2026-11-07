@@ -22,23 +22,36 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     env:
       NODE_ENV: test
       DATABASE_URL: postgresql://resifix:resifix@localhost:5432/resifix_ci?schema=public
+      REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-only-secret
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
-      - name: Install
+      - name: Install (also generates the Prisma client)
         run: npm ci
 
       - name: Lint
         run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
 
       - name: Apply migrations to throwaway Postgres
         run: npm run migrate:deploy
@@ -49,13 +62,28 @@ jobs:
       - name: Seed
         run: npm run seed
 
-      - name: Build client
+      - name: Build API (NestJS) and client (React PWA)
         run: npm run build
 
       - name: API smoke test
         run: |
-          npm start &
-          for i in $(seq 1 20); do curl -fs localhost:3000/api/health && break; sleep 1; done
-          curl -fs localhost:3000/api/health
+          npm start > api.log 2>&1 &
+          for i in $(seq 1 30); do curl -fs localhost:3000/api/health && break; sleep 1; done
+          curl -fs localhost:3000/api/health | grep -q '"redis":"ok"'
           curl -fs -X POST localhost:3000/api/auth/request-otp -H 'content-type: application/json' -d '{"phone":"0700000010"}'
-          curl -fs -X POST localhost:3000/api/auth/verify-otp -H 'content-type: application/json' -d '{"phone":"0700000010","code":"123456"}' | grep -q '"token"'
+          TOKEN=$(curl -fs -X POST localhost:3000/api/auth/verify-otp -H 'content-type: application/json' -d '{"phone":"0700000010","code":"123456"}' | sed 's/.*"token":"\([^"]*\)".*/\1/')
+          curl -fs localhost:3000/api/tickets -H "Authorization: Bearer $TOKEN" | grep -q '"tickets"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:3000/api/custodian/queue -H "Authorization: Bearer $TOKEN")" = 403
+
+      - name: API log
+        if: always()
+        run: cat api.log || true
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images
+        run: |
+          docker build -f server/Dockerfile -t resifix-api .
+          docker build -f client/Dockerfile -t resifix-web .

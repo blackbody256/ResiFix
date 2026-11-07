@@ -19,5 +19,5 @@ Thumbs.db
 !.vscode/extensions.json
 .idea/
 
-# local uploads (photos) until object storage is wired
-uploads/
+# TypeScript incremental build info
+*.tsbuildinfo
