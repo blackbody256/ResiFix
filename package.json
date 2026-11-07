@@ -1,25 +1,29 @@
 {
   "name": "resifix",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Maintenance management and accountability platform for student halls and hostels",
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": ">=20.12"
+    "node": ">=22.12"
   },
   "workspaces": [
     "server",
     "client"
   ],
   "scripts": {
-    "dev": "concurrently -k -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
+    "dev": "concurrently -k -n api,web -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "npm run dev -w server",
     "dev:client": "npm run dev -w client",
-    "build": "npm run build -w client",
+    "build": "npm run build -w server && npm run build -w client",
     "start": "npm run start -w server",
-    "db:up": "docker compose up -d db",
-    "db:down": "docker compose down",
+    "start:worker": "npm run start:worker -w server",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w client",
+    "infra:up": "docker compose up -d db redis minio",
+    "infra:down": "docker compose down",
+    "stack:up": "docker compose --profile app up -d --build",
+    "generate": "prisma generate",
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:check": "prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code",
@@ -27,7 +31,8 @@
     "db:reset": "prisma migrate reset --force",
     "studio": "prisma studio",
     "lint": "eslint . && prettier --check .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "postinstall": "prisma generate"
   },
   "prisma": {
     "schema": "prisma/schema.prisma",
@@ -41,8 +46,11 @@
     "concurrently": "^9.2.0",
     "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.14.0",
     "prettier": "^3.6.0",
-    "prisma": "^6.19.0"
+    "prisma": "^6.19.0",
+    "typescript-eslint": "^8.72.1"
   }
 }
