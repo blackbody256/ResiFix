@@ -1,17 +1,40 @@
 {
   "name": "@resifix/server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "type": "module",
-  "main": "src/index.js",
+  "description": "ResiFix API (NestJS) and background worker",
   "scripts": {
-    "dev": "node --watch src/index.js",
-    "start": "node src/index.js"
+    "build": "nest build",
+    "dev": "nest start --watch",
+    "start": "node dist/main.js",
+    "start:worker": "node dist/worker.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "vapid:generate": "web-push generate-vapid-keys"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1164.0",
+    "@aws-sdk/s3-request-presigner": "^3.1164.0",
+    "@nestjs/bullmq": "^12.0.1",
+    "@nestjs/common": "^12.4.0",
+    "@nestjs/core": "^12.4.0",
+    "@nestjs/jwt": "^12.0.4",
+    "@nestjs/platform-express": "^12.4.0",
     "@prisma/client": "^6.19.0",
-    "express": "^5.1.0",
-    "jsonwebtoken": "^9.0.2",
+    "@sentry/nestjs": "^11.11.0",
+    "bullmq": "^6.7.2",
+    "ioredis": "^6.0.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "web-push": "^4.0.0",
     "zod": "^4.6.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^12.0.12",
+    "@nestjs/schematics": "^12.0.13",
+    "@types/express": "^5.0.0",
+    "@types/multer": "^2.3.0",
+    "@types/node": "^24.0.0",
+    "@types/web-push": "^3.6.4",
+    "typescript": "^6.0.2"
   }
 }
