@@ -52,6 +52,7 @@ enum PhotoKind {
 enum NotificationChannel {
   IN_APP
   SMS
+  PUSH
 }
 
 // ---------------------------------------------------------------------------
@@ -123,10 +124,26 @@ model User {
   repairProofs    RepairProof[]
   verifications   Verification[]
   ratings         Rating[]
-  notifications   Notification[]
-  auditLogs       AuditLog[]
+  notifications     Notification[]
+  pushSubscriptions PushSubscription[]
+  auditLogs         AuditLog[]
 
   @@index([propertyId, role])
+}
+
+/// A browser/device that accepted Web Push. Deleted when the push service reports it gone.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 /// Resident <-> Room over time. endDate = null means currently living there.

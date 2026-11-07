@@ -55,6 +55,7 @@ async function wipe() {
   await prisma.$transaction([
     prisma.auditLog.deleteMany(),
     prisma.notification.deleteMany(),
+    prisma.pushSubscription.deleteMany(),
     prisma.rating.deleteMany(),
     prisma.verification.deleteMany(),
     prisma.photo.deleteMany(),
