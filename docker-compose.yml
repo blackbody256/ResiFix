@@ -1,7 +1,18 @@
+# Local infrastructure:      docker compose up -d db redis minio      (npm run infra:up)
+# Full stack behind Nginx:   docker compose --profile app up -d --build  (npm run stack:up)
+#                            -> http://localhost:8080
+
+x-app-env: &app-env
+  NODE_ENV: ${NODE_ENV:-production}
+  DATABASE_URL: postgresql://resifix:resifix@db:5432/resifix?schema=public
+  REDIS_URL: redis://redis:6379
+  RUN_WORKER_INLINE: 'false'
+  S3_ENDPOINT: http://minio:9000
+  S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+
 services:
   db:
     image: postgres:16-alpine
-    container_name: resifix-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: resifix
@@ -10,12 +21,91 @@ services:
     ports:
       - '5432:5432'
     volumes:
-      - resifix-pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U resifix -d resifix']
       interval: 5s
       timeout: 3s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    ports:
+      - '6379:6379'
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: resifix
+      MINIO_ROOT_PASSWORD: resifix-secret
+    ports:
+      - '9000:9000' # S3 API
+      - '9001:9001' # web console
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ---- application (profile "app") -------------------------------------------------------
+  migrate:
+    profiles: [app]
+    build: { context: ., dockerfile: server/Dockerfile }
+    env_file: [{ path: .env, required: false }]
+    environment: *app-env
+    command: ['npx', 'prisma', 'migrate', 'deploy']
+    depends_on:
+      db: { condition: service_healthy }
+
+  api:
+    profiles: [app]
+    build: { context: ., dockerfile: server/Dockerfile }
+    restart: unless-stopped
+    env_file: [{ path: .env, required: false }]
+    environment: *app-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
+
+  worker:
+    profiles: [app]
+    build: { context: ., dockerfile: server/Dockerfile }
+    restart: unless-stopped
+    env_file: [{ path: .env, required: false }]
+    environment: *app-env
+    command: ['node', 'server/dist/worker.js']
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+
+  web:
+    profiles: [app]
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+      args:
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+    restart: unless-stopped
+    ports:
+      - '8080:80'
+    depends_on:
+      - api
+
 volumes:
-  resifix-pgdata:
+  pgdata:
+  redisdata:
+  miniodata:
