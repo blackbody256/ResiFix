@@ -130,6 +130,7 @@ function ReportForm({
   function removePhoto(index: number) {
     URL.revokeObjectURL(photos[index].preview);
     setPhotos(photos.filter((_, i) => i !== index));
+    setError(''); // e.g. "up to 2 photos" no longer applies once there is room again
   }
 
   async function submit(e: FormEvent) {
