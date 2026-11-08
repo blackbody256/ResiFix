@@ -3,7 +3,8 @@
 //   [ ] PB-019  proof of repair: photo (StorageService, kind PROOF) + work note,
 //               IN_PROGRESS -> COMPLETED; then TicketTimersService.scheduleAutoClose()
 //   [ ] PB-020  resident verification API: Fixed / Still a problem (-> REOPENED); UI by Ayan.
-//               Cancel the auto-close timer with TicketTimersService.cancelAutoClose()
+//               Cancel the auto-close timer with TicketTimersService.cancelAutoClose(). On reopen:
+//               ResponseTargetsService.startClock(id) and CustodianAlertsService.ticketReopened(id)
 //   [x] PB-021  48-hour auto-close: worker job in src/worker/ticket-timers.processor.ts
 //   [ ] PB-026  response and repair-time stats
 //   [ ] PB-027  recurring-fault analytics
