@@ -74,11 +74,20 @@ export class ReportingController {
     return { photo };
   }
 
-  /** PB-007: short-lived link to view a photo. GET /api/reporting/photos/:photoId/link */
+  /**
+   * PB-007: short-lived link to view a photo. GET /api/reporting/photos/:photoId/link
+   * Same visibility as GET /tickets/:id: staff see any photo in their property, residents only
+   * photos on tickets they reported (they are taken inside someone's room).
+   */
   @Get('photos/:photoId/link')
-  async photoLink(@Param('photoId') photoId: string, @Scope() scope: PropertyScope) {
+  async photoLink(
+    @Param('photoId') photoId: string,
+    @CurrentUser() user: AuthUser,
+    @Scope() scope: PropertyScope,
+  ) {
+    const own = user.role === Role.RESIDENT ? { ticket: { reporterId: user.id } } : {};
     const photo = await this.prisma.photo.findFirst({
-      where: scope.where<Prisma.PhotoWhereInput>({ id: photoId }, 'ticket'),
+      where: scope.where<Prisma.PhotoWhereInput>({ id: photoId, ...own }, 'ticket'),
     });
     if (!photo) throw notFound('Photo not found');
     return this.storage.presignedGetUrl(photo.url);

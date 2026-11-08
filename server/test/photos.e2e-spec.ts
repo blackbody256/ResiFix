@@ -75,6 +75,38 @@ describe('report photos', () => {
       .expect(403);
   });
 
+  describe('GET /reporting/photos/:photoId/link', () => {
+    let photoId: string;
+    beforeAll(async () => {
+      const res = await upload(home.residents[1], neighbours.id)
+        .attach('photo', PNG, { filename: 'socket.png', contentType: 'image/png' })
+        .expect(201);
+      photoId = res.body.photo.id;
+    });
+
+    it('gives the reporter and staff of the property a working link', async () => {
+      for (const caller of [home.residents[1], home.custodian, home.admin]) {
+        const res = await t.as(caller).get(`/reporting/photos/${photoId}/link`).expect(200);
+        expect(res.body).toEqual({ url: expect.any(String), expiresAt: expect.any(String) });
+      }
+    });
+
+    it("hides another resident's photo, even in the same property", async () => {
+      // Photos are taken inside someone's room: other residents must not see them.
+      const res = await t
+        .as(home.residents[0])
+        .get(`/reporting/photos/${photoId}/link`)
+        .expect(404);
+      expect(res.body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('hides photos from other properties', async () => {
+      for (const caller of [away.residents[0], away.custodian, away.admin]) {
+        await t.as(caller).get(`/reporting/photos/${photoId}/link`).expect(404);
+      }
+    });
+  });
+
   it('rejects a missing file, a non-image and an oversized file', async () => {
     const missing = await upload(home.residents[0], mine.id).expect(400);
     expect(missing.body.error.code).toBe('BAD_REQUEST');
