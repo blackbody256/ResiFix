@@ -1,6 +1,7 @@
 // OWNER: Andrew
 // TODO:
 //   [ ] PB-012  response targets by category; flag overdue tickets
+//               GET /targets; ResponseTargetsService.startClock() sets dueAt + schedules the alert
 //   [ ] PB-013  prioritised work queue: urgency and least time remaining, search and filter
 //   [ ] PB-014  review and correct the ticket category (REPORTED -> REVIEWED);
 //               then TicketTimersService.scheduleResponseDeadline()
@@ -13,11 +14,21 @@
 import { Controller, Get, Post } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { notImplemented } from '../common/app-exception';
-import { Roles } from '../common/decorators';
+import { Roles, Scope } from '../common/decorators';
+import type { PropertyScope } from '../common/property-scope';
+import { ResponseTargetsService } from './response-targets.service';
 
 @Controller('custodian')
 @Roles(Role.CUSTODIAN, Role.ADMIN)
 export class CustodianController {
+  constructor(private readonly targets: ResponseTargetsService) {}
+
+  /** PB-012: the response targets in force for the caller's property. GET /api/custodian/targets */
+  @Get('targets')
+  async listTargets(@Scope() scope: PropertyScope) {
+    return { targets: await this.targets.list(scope) };
+  }
+
   @Get('queue')
   queue() {
     notImplemented('PB-013');

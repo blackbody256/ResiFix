@@ -55,22 +55,23 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 
 ### Implemented
 
-| Method | Path                                | Auth     | Request                                          | Response                                                     |
-| ------ | ----------------------------------- | -------- | ------------------------------------------------ | ------------------------------------------------------------ |
-| GET    | `/health`                           | public   | –                                                | `{ status, db, redis, time }` (503 if DB down)               |
-| POST   | `/auth/request-otp`                 | public   | `{ phone }`                                      | `{ phone, expiresInSeconds }`                                |
-| POST   | `/auth/verify-otp`                  | public   | `{ phone, code }`                                | `{ token, user: { id, propertyId, phone, name, role } }`     |
-| GET    | `/auth/me`                          | any      | –                                                | `{ user }`                                                   |
-| GET    | `/properties/mine`                  | any      | –                                                | `{ property: { ..., blocks: [{ ..., rooms }] } }`            |
-| GET    | `/reporting/fault-categories`       | any      | –                                                | `{ categories: [{ ..., items }] }`                           |
-| POST   | `/reporting/tickets/:id/photos`     | RESIDENT | multipart, field `photo` (JPEG/PNG/WebP, ≤ 5 MB) | `{ photo: { id, kind, createdAt } }`                         |
-| GET    | `/reporting/photos/:photoId/link`   | any      | –                                                | `{ url, expiresAt }`: presigned link; residents: own tickets |
-| GET    | `/tickets`                          | any      | –                                                | `{ tickets }`. Residents see only their own tickets.         |
-| GET    | `/tickets/:id`                      | any      | –                                                | `{ ticket }` with photos, visits, proof, `timeline` (PB-010) |
-| GET    | `/notifications`                    | any      | –                                                | `{ notifications }`: caller's latest 50                      |
-| GET    | `/notifications/push/public-key`    | public   | –                                                | `{ publicKey }` (null when Web Push is not configured)       |
-| POST   | `/notifications/push/subscriptions` | any      | `PushSubscription.toJSON()`                      | `{ subscribed: true }`                                       |
-| DELETE | `/notifications/push/subscriptions` | any      | `{ endpoint }`                                   | `{ subscribed: false }`                                      |
+| Method | Path                                | Auth             | Request                                          | Response                                                                             |
+| ------ | ----------------------------------- | ---------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| GET    | `/health`                           | public           | –                                                | `{ status, db, redis, time }` (503 if DB down)                                       |
+| POST   | `/auth/request-otp`                 | public           | `{ phone }`                                      | `{ phone, expiresInSeconds }`                                                        |
+| POST   | `/auth/verify-otp`                  | public           | `{ phone, code }`                                | `{ token, user: { id, propertyId, phone, name, role } }`                             |
+| GET    | `/auth/me`                          | any              | –                                                | `{ user }`                                                                           |
+| GET    | `/properties/mine`                  | any              | –                                                | `{ property: { ..., blocks: [{ ..., rooms }] } }`                                    |
+| GET    | `/reporting/fault-categories`       | any              | –                                                | `{ categories: [{ ..., items }] }`                                                   |
+| POST   | `/reporting/tickets/:id/photos`     | RESIDENT         | multipart, field `photo` (JPEG/PNG/WebP, ≤ 5 MB) | `{ photo: { id, kind, createdAt } }`                                                 |
+| GET    | `/reporting/photos/:photoId/link`   | any              | –                                                | `{ url, expiresAt }`: presigned link; residents: own tickets                         |
+| GET    | `/tickets`                          | any              | –                                                | `{ tickets }`. Residents see only their own tickets.                                 |
+| GET    | `/tickets/:id`                      | any              | –                                                | `{ ticket }` with photos, visits, proof, `timeline` (PB-010)                         |
+| GET    | `/custodian/targets`                | CUSTODIAN, ADMIN | –                                                | `{ targets: [{ id, priority, category, respondWithinH, resolveWithinH }] }` (PB-012) |
+| GET    | `/notifications`                    | any              | –                                                | `{ notifications }`: caller's latest 50                                              |
+| GET    | `/notifications/push/public-key`    | public           | –                                                | `{ publicKey }` (null when Web Push is not configured)                               |
+| POST   | `/notifications/push/subscriptions` | any              | `PushSubscription.toJSON()`                      | `{ subscribed: true }`                                                               |
+| DELETE | `/notifications/push/subscriptions` | any              | `{ endpoint }`                                   | `{ subscribed: false }`                                                              |
 
 ### Stubs (return 501 until built)
 
@@ -90,6 +91,17 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | POST   | `/completion/tickets/:id/rating`       | RESIDENT         | PB-022         |
 
 Backlog IDs and titles match the ClickUp board. Stories with no stub yet (PB-012, PB-016, PB-018, PB-024 and others) add their endpoints to this file in the PR that builds them.
+
+### Response targets and breach flags (PB-012)
+
+Each `ResponseTarget` gives a priority (optionally one category) two windows, both counted from when the ticket was reported, or last reopened:
+
+| Clock     | Runs while the ticket is               | Ends when                                   | Window           |
+| --------- | -------------------------------------- | ------------------------------------------- | ---------------- |
+| `RESPOND` | `REPORTED`, `REVIEWED`, `REOPENED`     | a custodian assigns, schedules or starts it | `respondWithinH` |
+| `RESOLVE` | `ASSIGNED`, `SCHEDULED`, `IN_PROGRESS` | the repair is `COMPLETED`                   | `resolveWithinH` |
+
+A category's own target wins over the property-wide one for the same priority. `Ticket.dueAt` holds the respond-by time; `ResponseTargetsService.startClock(ticketId)` sets it and schedules the `response-deadline` alert, and must be called after a ticket is reported (PB-005), reviewed or reclassified (PB-014) and reopened (PB-020). A ticket is `DUE_SOON` in the last quarter of its window and `OVERDUE` after it.
 
 ### `GET /tickets/:id` (PB-010)
 
