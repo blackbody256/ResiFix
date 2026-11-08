@@ -4,17 +4,18 @@ Five people are building this in parallel, so most of these rules exist to stop 
 
 ## Who owns what
 
-| Area          | Server module (NestJS)     | Client screen                  | Owner         | Backlog                                |
-| ------------- | -------------------------- | ------------------------------ | ------------- | -------------------------------------- |
-| Auth          | `server/src/auth`          | `client/src/screens/Login.tsx` | Ann           | PB-001, PB-002                         |
-| Properties    | `server/src/properties`    | `screens/Properties.tsx`       | Amabe         | PB-003, PB-004                         |
-| Reporting     | `server/src/reporting`     | `screens/Reporting.tsx`        | Amabe / Ayan  | PB-005..PB-009                         |
-| Tickets       | `server/src/tickets`       | `screens/Tickets.tsx`          | Ayan          | PB-010, PB-011, PB-020, PB-022, PB-023 |
-| Custodian     | `server/src/custodian`     | `screens/Custodian.tsx`        | Andrew        | PB-012..PB-018, PB-024                 |
-| Completion    | `server/src/completion`    | `screens/Completion.tsx`       | Selina        | PB-019, PB-021, PB-025..PB-029         |
-| Notifications | `server/src/notifications` | `client/src/lib/push.ts`       | Ayan / Andrew | PB-023, PB-024                         |
+| Area          | Server module (NestJS)               | Client screen                  | Owner         | Backlog                                      |
+| ------------- | ------------------------------------ | ------------------------------ | ------------- | -------------------------------------------- |
+| Auth          | `server/src/auth`                    | `client/src/screens/Login.tsx` | Ann           | PB-001, PB-002                               |
+| Properties    | `server/src/properties`              | `screens/Properties.tsx`       | Amabe         | PB-003, PB-004                               |
+| Reporting     | `server/src/reporting`               | `screens/Reporting.tsx`        | Amabe / Ayan  | PB-005..PB-009                               |
+| Tickets       | `server/src/tickets`                 | `screens/Tickets.tsx`          | Ayan          | PB-010, PB-011, PB-020, PB-022, PB-023       |
+| Custodian     | `server/src/custodian`               | `screens/Custodian.tsx`        | Andrew        | PB-012..PB-018, PB-024                       |
+| Completion    | `server/src/completion`              | `screens/Completion.tsx`       | Selina        | PB-019, PB-020 (API), PB-021, PB-026..PB-029 |
+| Audit history | `server/src/common/audit.service.ts` | –                              | Ann           | PB-025                                       |
+| Notifications | `server/src/notifications`           | `client/src/lib/push.ts`       | Ayan / Andrew | PB-023, PB-024                               |
 
-Each module's controller has an `// OWNER:` tag and a TODO list of its backlog IDs. Tick an item off in the PR that finishes it.
+Backlog IDs and titles come from the team's ClickUp board; use them in branch names and PR titles. Each module's controller has an `// OWNER:` tag and a TODO list of its backlog IDs. Tick an item off in the PR that finishes it.
 
 Do your work inside your own module. If you need to change something shared, open a PR for that change on its own.
 
@@ -42,7 +43,7 @@ Branch from `main`, and rebase on `main` before opening a PR. Each branch covers
 ## Pull requests
 
 - Every PR is reviewed and approved by **Ann or Andrew** before merge. Do not merge your own PR.
-- CI must pass: lint, typecheck, migrations, seed, both builds, the API smoke test and the Docker image builds.
+- CI must pass: lint, typecheck, migrations, seed, the unit and e2e tests, both builds, the API smoke test and the Docker image builds.
 - Put the backlog ID in the title: `PB-005: Resident can report a fault`.
 - In the description: what changed, how to test it, and screenshots for any UI change.
 
@@ -51,7 +52,7 @@ Branch from `main`, and rebase on `main` before opening a PR. Each branch covers
 A backlog item is done when **all** of these are true:
 
 1. **Meets the acceptance criteria** written on the backlog item.
-2. **Tested**: you exercised the happy path and the main error cases (wrong role, other property's data, bad input). Add automated tests where practical.
+2. **Tested**: you exercised the happy path and the main error cases (wrong role, other property's data, bad input), and every new endpoint has an e2e test covering them (see [server/test/README.md](server/test/README.md)).
 3. **Demoed**: shown working to at least one other teammate, end to end through the client.
 4. Merged to `main` with CI green and the TODO line in your controller ticked off.
 
@@ -64,22 +65,23 @@ cp .env.example .env          # defaults work with docker-compose
 npm install                   # also runs `prisma generate`
 npm run infra:up              # Postgres :5432, Redis :6379, MinIO :9000 (console :9001)
 npm run migrate               # apply migrations
-npm run seed                  # demo hostel, users, fault catalogue
+npm run seed                  # two demo properties, users, tickets in every status
 npm run dev                   # API :3000 (with the queue worker inline), app http://localhost:5173
 ```
 
 Log in with any seeded phone number. In development the OTP is always **123456**, and the API also prints it to its log.
 
-| Role      | Phone                       |
-| --------- | --------------------------- |
-| Custodian | 0700 000 001                |
-| Admin     | 0700 000 002                |
-| Resident  | 0700 000 010 – 0700 000 013 |
+| Role      | Kikoni Demo Hostel          | Mitchell Hall (demo)       |
+| --------- | --------------------------- | -------------------------- |
+| Custodian | 0700 000 001, 0700 000 003  | 0700 000 101               |
+| Admin     | 0700 000 002                | 0700 000 102               |
+| Resident  | 0700 000 010 – 0700 000 013 | 0700 000 110, 0700 000 111 |
 
 | Command                            | What it does                                                     |
 | ---------------------------------- | ---------------------------------------------------------------- |
 | `npm run lint` / `npm run format`  | ESLint + Prettier check / fix                                    |
 | `npm run typecheck`                | TypeScript for server and client                                 |
+| `npm test`                         | Server unit + e2e tests (`test:unit` / `test:e2e` for one kind)  |
 | `npm run build`                    | Build the API (`server/dist`) and the PWA (`client/dist`)        |
 | `npm run start:worker`             | Run the BullMQ worker on its own (set `RUN_WORKER_INLINE=false`) |
 | `npm run db:reset`                 | Drop, re-migrate and re-seed                                     |

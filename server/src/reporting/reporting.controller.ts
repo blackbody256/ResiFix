@@ -1,10 +1,13 @@
 // OWNER: Amabe / Ayan
 // TODO:
-//   [ ] PB-005  resident reports a fault (create ticket)
-//   [ ] PB-006  attach photos: upload endpoint works; add client UI and limits per ticket
-//   [x] PB-007  photos served via expiring presigned links
-//   [ ] PB-008
-//   [ ] PB-009
+//   [ ] PB-005  report a room fault: create a ticket with a unique reference (UI by Ayan).
+//               After creating it: ResponseTargetsService.startClock(id) (import CustodianModule)
+//               and CustodianAlertsService.ticketReported(id) (NotificationsModule)
+//   [ ] PB-006  report a shared-facility fault (UI by Ayan)
+//   [ ] PB-007  upload up to two photos: upload and presigned links work; still to do: the
+//               limit of two per ticket, on-device compression in the UI (Ayan)
+//   [ ] PB-008  provide availability for scheduling (UI by Ayan)
+//   [ ] PB-009  follow a shared fault instead of reporting a duplicate
 import { Controller, Get, Param, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { type Prisma, PhotoKind, Role } from '@prisma/client';
@@ -74,11 +77,20 @@ export class ReportingController {
     return { photo };
   }
 
-  /** PB-007: short-lived link to view a photo. GET /api/reporting/photos/:photoId/link */
+  /**
+   * PB-007: short-lived link to view a photo. GET /api/reporting/photos/:photoId/link
+   * Same visibility as GET /tickets/:id: staff see any photo in their property, residents only
+   * photos on tickets they reported (they are taken inside someone's room).
+   */
   @Get('photos/:photoId/link')
-  async photoLink(@Param('photoId') photoId: string, @Scope() scope: PropertyScope) {
+  async photoLink(
+    @Param('photoId') photoId: string,
+    @CurrentUser() user: AuthUser,
+    @Scope() scope: PropertyScope,
+  ) {
+    const own = user.role === Role.RESIDENT ? { ticket: { reporterId: user.id } } : {};
     const photo = await this.prisma.photo.findFirst({
-      where: scope.where<Prisma.PhotoWhereInput>({ id: photoId }, 'ticket'),
+      where: scope.where<Prisma.PhotoWhereInput>({ id: photoId, ...own }, 'ticket'),
     });
     if (!photo) throw notFound('Photo not found');
     return this.storage.presignedGetUrl(photo.url);
