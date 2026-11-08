@@ -10,18 +10,18 @@ Base path: `/api`. JSON in and out. Every route needs `Authorization: Bearer <jw
 - **Success**: a JSON object whose top-level key names the resource: `{ "ticket": {...} }` or `{ "tickets": [...] }`.
 - **Error**: `{ "error": { "code": "NOT_FOUND", "message": "Human readable", "details": <optional> } }`
 
-| Status | code                | When                                                  |
-| ------ | ------------------- | ----------------------------------------------------- |
-| 400    | `VALIDATION_FAILED` | body failed zod validation (`details` = field errors) |
-| 400    | `BAD_REQUEST`       | other client error                                    |
-| 400    | `BAD_JSON`          | body is not valid JSON                                |
-| 401    | `UNAUTHORIZED`      | missing/invalid/expired token, wrong OTP              |
-| 403    | `FORBIDDEN`         | wrong role                                            |
-| 404    | `NOT_FOUND`         | no such record, **or it belongs to another property** |
-| 409    | `CONFLICT`          | illegal status transition, duplicate record           |
-| 413    | `PAYLOAD_TOO_LARGE` | upload over the size limit                            |
-| 429    | `TOO_MANY_REQUESTS` | too many OTP attempts                                 |
-| 501    | `NOT_IMPLEMENTED`   | stub route, backlog item not built yet                |
+| Status | code                | When                                                                                                                                                                                     |
+| ------ | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `VALIDATION_FAILED` | body or query failed validation, or a field's value is not acceptable (an id from another property, a time in the past); `details` = `{ formErrors, fieldErrors: { field: [message] } }` |
+| 400    | `BAD_REQUEST`       | other client error                                                                                                                                                                       |
+| 400    | `BAD_JSON`          | body is not valid JSON                                                                                                                                                                   |
+| 401    | `UNAUTHORIZED`      | missing/invalid/expired token, wrong OTP                                                                                                                                                 |
+| 403    | `FORBIDDEN`         | wrong role                                                                                                                                                                               |
+| 404    | `NOT_FOUND`         | no such record, **or it belongs to another property**                                                                                                                                    |
+| 409    | `CONFLICT`          | illegal status transition, duplicate record                                                                                                                                              |
+| 413    | `PAYLOAD_TOO_LARGE` | upload over the size limit                                                                                                                                                               |
+| 429    | `TOO_MANY_REQUESTS` | too many OTP attempts                                                                                                                                                                    |
+| 501    | `NOT_IMPLEMENTED`   | stub route, backlog item not built yet                                                                                                                                                   |
 
 - IDs are cuid strings. Timestamps are ISO 8601 UTC.
 - Phone numbers are stored in E.164 format (`+256700000010`). The API also accepts `0700 000 010`.
