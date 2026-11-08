@@ -7,6 +7,7 @@ export const VISIT_EVENTS = {
   SCHEDULED: 'visit.scheduled',
   CHANGE_REQUESTED: 'visit.change_requested',
   RESCHEDULED: 'visit.rescheduled',
+  MISSED: 'visit.missed',
 } as const;
 
 export interface ChangeRequest {
