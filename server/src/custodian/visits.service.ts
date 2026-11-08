@@ -1,20 +1,23 @@
-// Repair visits: PB-015 schedule. Same pattern as TicketActionsService: load in scope, check the
-// lifecycle, conditional update + audit in one transaction, notify after the commit.
+// Repair visits: PB-015 schedule, PB-016 the resident asks for another time and the custodian
+// moves the visit. Same pattern as TicketActionsService: load in scope, check the lifecycle,
+// conditional update + audit in one transaction, notify after the commit.
 import { Injectable } from '@nestjs/common';
-import { Role, TicketStatus } from '@prisma/client';
+import { type Prisma, Role, TicketStatus } from '@prisma/client';
 import { z } from 'zod';
 import type { AuthUser } from '../auth/auth-user';
-import { conflict } from '../common/app-exception';
+import { conflict, notFound } from '../common/app-exception';
 import { AuditService } from '../common/audit.service';
 import type { PropertyScope } from '../common/property-scope';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { openChangeRequests, VISIT_EVENTS } from './change-requests';
 import { fieldError } from './field-error';
 import { kampalaTime } from './kampala-time';
 import { MINUTE_MS } from './response-targets';
 import {
   describeTicket,
   moveTicket,
+  TICKET_CONTEXT,
   TicketActionsService,
   updateIfUnchanged,
 } from './ticket-actions.service';
@@ -40,6 +43,14 @@ export const ScheduleBody = z.object({
   notes: z.string().trim().min(1).max(300).optional(),
 });
 export type ScheduleBody = z.infer<typeof ScheduleBody>;
+
+/** PB-016: the custodian moves a booked visit. */
+export const RescheduleBody = ScheduleBody.pick({ scheduledAt: true, notes: true });
+export type RescheduleBody = z.infer<typeof RescheduleBody>;
+
+/** PB-016: the resident says why, and when suits them instead. */
+export const ChangeRequestBody = z.object({ message: z.string().trim().min(1).max(300) });
+export type ChangeRequestBody = z.infer<typeof ChangeRequestBody>;
 
 const VISIT_SELECT = {
   id: true,
@@ -127,7 +138,7 @@ export class VisitsService {
           propertyId: ticket.propertyId,
           actorId: user.id,
           ticketId: ticket.id,
-          action: 'visit.scheduled',
+          action: VISIT_EVENTS.SCHEDULED,
           ...(toScheduled ? { fromStatus: ticket.status, toStatus: S.SCHEDULED } : {}),
           meta: {
             visitId: created.id,
@@ -157,5 +168,116 @@ export class VisitsService {
     }
 
     return { visit, ticket: await this.queue.item(ticket.id, scope) };
+  }
+
+  /**
+   * PB-016: the resident who reported the ticket asks for a different time for its upcoming
+   * visit, before the visit is due. One open request per visit; moving the visit answers it.
+   * The visiting custodian (and the assignee, if someone else) is told.
+   */
+  async requestChange(visitId: string, message: string, user: AuthUser, scope: PropertyScope) {
+    const visit = await this.prisma.visit.findFirst({
+      where: scope.where<Prisma.VisitWhereInput>(
+        { id: visitId, ticket: { reporterId: user.id } },
+        'ticket',
+      ),
+      include: { ticket: { include: TICKET_CONTEXT } },
+    });
+    if (!visit) throw notFound('Visit not found');
+    if (visit.arrivedAt || visit.missed) throw conflict('This visit has already happened');
+    if (visit.scheduledAt.getTime() <= Date.now()) {
+      throw conflict('The visit time has passed. Please contact the custodian.');
+    }
+    if ((await openChangeRequests(this.prisma, [visit.ticketId])).has(visit.id)) {
+      throw conflict('You have already asked for another time for this visit');
+    }
+
+    const { ticket } = visit;
+    const row = await this.audit.record({
+      propertyId: ticket.propertyId,
+      actorId: user.id,
+      ticketId: ticket.id,
+      action: VISIT_EVENTS.CHANGE_REQUESTED,
+      meta: { visitId: visit.id, message, scheduledAt: visit.scheduledAt.toISOString() },
+    });
+
+    const staff = new Set([visit.custodianId, ticket.assigneeId].filter((id) => id !== null));
+    await this.notifications.notifyMany([...staff], {
+      ticketId: ticket.id,
+      title: 'Resident asks for another time',
+      body: `${describeTicket(ticket)}, booked for ${kampalaTime(visit.scheduledAt)}: "${message}"`,
+    });
+
+    return { changeRequest: { visitId: visit.id, message, requestedAt: row.createdAt } };
+  }
+
+  /**
+   * PB-016: move an upcoming visit to a new time (answering the resident's request, or because
+   * the custodian cannot make it). The resident is told the new time.
+   */
+  async reschedule(visitId: string, input: RescheduleBody, user: AuthUser, scope: PropertyScope) {
+    const visit = await this.prisma.visit.findFirst({
+      where: scope.where<Prisma.VisitWhereInput>({ id: visitId }, 'ticket'),
+      include: { ticket: { include: TICKET_CONTEXT } },
+    });
+    if (!visit) throw notFound('Visit not found');
+    if (visit.arrivedAt || visit.missed) {
+      throw conflict('This visit has already happened. Book a new one instead.');
+    }
+    checkVisitTime(input.scheduledAt);
+
+    const { ticket } = visit;
+    const moved = visit.scheduledAt.getTime() !== input.scheduledAt.getTime();
+    if (!moved && (input.notes === undefined || input.notes === visit.notes)) {
+      return { visit: await this.visit(visit.id), ticket: await this.queue.item(ticket.id, scope) };
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.visit.updateMany({
+        where: { id: visit.id, arrivedAt: null, missed: false },
+        data: {
+          scheduledAt: input.scheduledAt,
+          ...(input.notes !== undefined && { notes: input.notes }),
+        },
+      });
+      if (count === 0) throw conflict('Someone else updated this visit. Reload and try again.');
+      await this.audit.record(
+        {
+          propertyId: ticket.propertyId,
+          actorId: user.id,
+          ticketId: ticket.id,
+          action: VISIT_EVENTS.RESCHEDULED,
+          meta: {
+            visitId: visit.id,
+            from: visit.scheduledAt.toISOString(),
+            to: input.scheduledAt.toISOString(),
+          },
+        },
+        tx,
+      );
+    });
+
+    if (moved) {
+      const when = kampalaTime(input.scheduledAt);
+      await this.notifications.notify({
+        userId: ticket.reporterId,
+        ticketId: ticket.id,
+        title: 'Repair visit moved',
+        body: `${describeTicket(ticket)}: now ${when}. Please make sure someone can let the custodian in.`,
+      });
+      if (visit.custodianId !== user.id) {
+        await this.notifications.notify({
+          userId: visit.custodianId,
+          ticketId: ticket.id,
+          title: 'Your visit was moved',
+          body: `${describeTicket(ticket)}: now ${when}.`,
+        });
+      }
+    }
+    return { visit: await this.visit(visit.id), ticket: await this.queue.item(ticket.id, scope) };
+  }
+
+  private visit(id: string) {
+    return this.prisma.visit.findUniqueOrThrow({ where: { id }, select: VISIT_SELECT });
   }
 }
