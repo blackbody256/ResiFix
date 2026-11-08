@@ -7,12 +7,13 @@
 import { Injectable } from '@nestjs/common';
 import { type Prisma, Role, type Ticket, TicketStatus } from '@prisma/client';
 import type { AuthUser } from '../auth/auth-user';
-import { badRequest, conflict, notFound } from '../common/app-exception';
+import { conflict, notFound } from '../common/app-exception';
 import { AuditService } from '../common/audit.service';
 import type { PropertyScope } from '../common/property-scope';
 import { assertTransition } from '../common/ticket-status';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { fieldError } from './field-error';
 import { WorkQueueService } from './work-queue.service';
 
 const S = TicketStatus;
@@ -78,7 +79,7 @@ export class TicketActionsService {
     return ticket;
   }
 
-  /** An active custodian of the caller's property, or 400 naming the field. */
+  /** An active custodian of the caller's property, or a 400 field error. */
   async custodian(userId: string, scope: PropertyScope, field: string) {
     const custodian = await this.prisma.user.findFirst({
       where: scope.where<Prisma.UserWhereInput>({
@@ -89,9 +90,11 @@ export class TicketActionsService {
       select: { id: true, name: true },
     });
     if (!custodian) {
-      throw badRequest('Choose an active custodian of this property', {
-        [field]: ['Not an active custodian of this property'],
-      });
+      throw fieldError(
+        field,
+        'Not an active custodian of this property',
+        'Choose an active custodian of this property',
+      );
     }
     return custodian;
   }

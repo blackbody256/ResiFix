@@ -309,7 +309,10 @@ describe('PB-013 work queue', () => {
     it('only assigns to an active custodian of the same property (400)', async () => {
       for (const assigneeId of [home.residents[0].id, home.admin.id, away.custodian.id, 'nobody']) {
         const res = await assign(missed, assigneeId).expect(400);
-        expect(res.body.error.details).toHaveProperty('assigneeId');
+        expect(res.body.error).toMatchObject({
+          code: 'VALIDATION_FAILED',
+          details: { fieldErrors: { assigneeId: [expect.any(String)] } },
+        });
       }
       await t
         .as(home.custodian)
