@@ -1,5 +1,5 @@
 // Repair visits: PB-015 schedule, PB-016 the resident asks for another time and the custodian
-// moves the visit. Same pattern as TicketActionsService: load in scope, check the lifecycle,
+// moves the visit, PB-017 a visit that did not happen. Same pattern as TicketActionsService: load in scope, check the lifecycle,
 // conditional update + audit in one transaction, notify after the commit.
 import { Injectable } from '@nestjs/common';
 import { type Prisma, Role, TicketStatus } from '@prisma/client';
@@ -47,6 +47,42 @@ export type ScheduleBody = z.infer<typeof ScheduleBody>;
 /** PB-016: the custodian moves a booked visit. */
 export const RescheduleBody = ScheduleBody.pick({ scheduledAt: true, notes: true });
 export type RescheduleBody = z.infer<typeof RescheduleBody>;
+
+/** PB-017: why a visit did not happen. Kept for the missed-visit analytics (PB-028). */
+export const MissedReason = z.enum([
+  'RESIDENT_ABSENT', // nobody in the room to let the custodian in
+  'NO_ACCESS', // someone there, but the room or fitting could not be reached
+  'CUSTODIAN_UNAVAILABLE', // the custodian could not come
+  'OTHER', // explained in `notes`
+]);
+export type MissedReason = z.infer<typeof MissedReason>;
+
+export const MissedBody = z
+  .object({
+    reason: MissedReason,
+    /** Shared with the resident. Required for OTHER. */
+    notes: z.string().trim().min(1).max(300).optional(),
+  })
+  .refine((b) => b.reason !== 'OTHER' || b.notes, {
+    path: ['notes'],
+    message: 'Say what happened when the reason is OTHER',
+  });
+export type MissedBody = z.infer<typeof MissedBody>;
+
+/** What the resident is told, by reason. */
+function missedMessage(reason: MissedReason, when: string, notes?: string): string {
+  const open = 'Your ticket stays open and a new time will be booked.';
+  switch (reason) {
+    case 'RESIDENT_ABSENT':
+      return `The custodian came at ${when} but nobody was in to let them in. ${open} Ask for a time that suits you.`;
+    case 'NO_ACCESS':
+      return `The custodian came at ${when} but could not get to the fault. ${open}${notes ? ` Note: ${notes}` : ''}`;
+    case 'CUSTODIAN_UNAVAILABLE':
+      return `Sorry, the custodian could not make the visit at ${when}. ${open}`;
+    case 'OTHER':
+      return `The visit at ${when} did not go ahead: ${notes}. ${open}`;
+  }
+}
 
 /** PB-016: the resident says why, and when suits them instead. */
 export const ChangeRequestBody = z.object({ message: z.string().trim().min(1).max(300) });
@@ -274,6 +310,57 @@ export class VisitsService {
         });
       }
     }
+    return { visit: await this.visit(visit.id), ticket: await this.queue.item(ticket.id, scope) };
+  }
+
+  /**
+   * PB-017: the visit did not happen. Only once its time has come; the ticket keeps its status
+   * and the work queue asks for a new time (next step RESCHEDULE). The reason says who or what
+   * failed, for the missed-visit figures; the resident is told what happens next.
+   */
+  async markMissed(visitId: string, input: MissedBody, user: AuthUser, scope: PropertyScope) {
+    const visit = await this.prisma.visit.findFirst({
+      where: scope.where<Prisma.VisitWhereInput>({ id: visitId }, 'ticket'),
+      include: { ticket: { include: TICKET_CONTEXT } },
+    });
+    if (!visit) throw notFound('Visit not found');
+    if (visit.arrivedAt || visit.missed) throw conflict('This visit has already been recorded');
+    if (visit.scheduledAt.getTime() > Date.now() + SKEW_MS) {
+      throw conflict(
+        `This visit is not due until ${kampalaTime(visit.scheduledAt)}. Move it instead.`,
+      );
+    }
+
+    const { ticket } = visit;
+    await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.visit.updateMany({
+        where: { id: visit.id, arrivedAt: null, missed: false },
+        data: { missed: true },
+      });
+      if (count === 0) throw conflict('Someone else updated this visit. Reload and try again.');
+      await this.audit.record(
+        {
+          propertyId: ticket.propertyId,
+          actorId: user.id,
+          ticketId: ticket.id,
+          action: VISIT_EVENTS.MISSED,
+          meta: {
+            visitId: visit.id,
+            reason: input.reason,
+            scheduledAt: visit.scheduledAt.toISOString(),
+            ...(input.notes && { notes: input.notes }),
+          },
+        },
+        tx,
+      );
+    });
+
+    await this.notifications.notify({
+      userId: ticket.reporterId,
+      ticketId: ticket.id,
+      title: 'Repair visit missed',
+      body: `${describeTicket(ticket)}. ${missedMessage(input.reason, kampalaTime(visit.scheduledAt), input.notes)}`,
+    });
     return { visit: await this.visit(visit.id), ticket: await this.queue.item(ticket.id, scope) };
   }
 

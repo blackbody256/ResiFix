@@ -74,6 +74,7 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | POST   | `/custodian/tickets/:id/visits`     | CUSTODIAN, ADMIN | `{ scheduledAt, custodianId?, notes? }`          | 201 `{ visit, ticket: QueueItem }` (PB-015)                                          |
 | PATCH  | `/custodian/visits/:visitId`        | CUSTODIAN, ADMIN | `{ scheduledAt, notes? }`                        | `{ visit, ticket: QueueItem }` (PB-016)                                              |
 | POST   | `/visits/:visitId/change-request`   | RESIDENT         | `{ message }`                                    | 201 `{ changeRequest: { visitId, message, requestedAt } }` (PB-016)                  |
+| POST   | `/custodian/visits/:visitId/missed` | CUSTODIAN, ADMIN | `{ reason, notes? }`                             | `{ visit, ticket: QueueItem }` (PB-017)                                              |
 | GET    | `/notifications`                    | any              | –                                                | `{ notifications }`: caller's latest 50                                              |
 | GET    | `/notifications/push/public-key`    | public           | –                                                | `{ publicKey }` (null when Web Push is not configured)                               |
 | POST   | `/notifications/push/subscriptions` | any              | `PushSubscription.toJSON()`                      | `{ subscribed: true }`                                                               |
@@ -87,7 +88,6 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | POST   | `/properties/blocks/:blockId/rooms`    | ADMIN            | PB-003         |
 | POST   | `/properties/occupancies`              | ADMIN            | PB-004         |
 | POST   | `/reporting/tickets`                   | RESIDENT         | PB-005, PB-006 |
-| POST   | `/custodian/visits/:visitId/missed`    | CUSTODIAN, ADMIN | PB-017         |
 | POST   | `/completion/tickets/:id/repair-proof` | CUSTODIAN, ADMIN | PB-019         |
 | POST   | `/completion/tickets/:id/verify`       | RESIDENT         | PB-020         |
 | POST   | `/completion/tickets/:id/rating`       | RESIDENT         | PB-022         |
@@ -168,6 +168,16 @@ A `QueueItem` names the room, never the resident:
 - `PATCH /custodian/visits/:visitId { scheduledAt, notes? }` (staff): moves an upcoming visit (409 if it already happened), which also answers an open request. The resident is told the new time, and the visiting custodian if someone else moved it. The same time and notes is a no-op. Audit action `visit.rescheduled`, `meta: { visitId, from, to }`.
 
 A request is open while it is the latest `visit.*` audit event for its visit, so no extra table is needed.
+
+### Missed visit (PB-017)
+
+`POST /custodian/visits/:visitId/missed { reason, notes? }`
+
+- `reason`: `RESIDENT_ABSENT` (nobody in to open the room), `NO_ACCESS` (the room or fitting could not be reached), `CUSTODIAN_UNAVAILABLE` (the custodian could not come) or `OTHER` (then `notes` is required). The reason is what the missed-visit figures (PB-028) count.
+- Only once the visit time has come (409 before it: move the visit instead), and only once per visit (409).
+- The ticket keeps its status (`SCHEDULED`, or `IN_PROGRESS` for a follow-up visit); in the work queue it shows `lastMissedVisit` and `next: 'RESCHEDULE'`. Book the new time with PB-015.
+- The resident is told what happened and that the ticket stays open; `notes` are shared with them.
+- Audit action `visit.missed`, `meta: { visitId, reason, scheduledAt, notes? }`.
 
 ### `GET /tickets/:id` (PB-010)
 

@@ -15,13 +15,12 @@ import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nes
 import { Role } from '@prisma/client';
 import { z } from 'zod';
 import type { AuthUser } from '../auth/auth-user';
-import { notImplemented } from '../common/app-exception';
 import { CurrentUser, Roles, Scope } from '../common/decorators';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import type { PropertyScope } from '../common/property-scope';
 import { ResponseTargetsService } from './response-targets.service';
 import { ReviewBody, TicketActionsService } from './ticket-actions.service';
-import { RescheduleBody, ScheduleBody, VisitsService } from './visits.service';
+import { MissedBody, RescheduleBody, ScheduleBody, VisitsService } from './visits.service';
 import { QueueQuery, WorkQueueService } from './work-queue.service';
 
 const AssignBody = z.object({ assigneeId: z.string().min(1) });
@@ -110,8 +109,18 @@ export class CustodianController {
     return this.visits.reschedule(visitId, body, user, scope);
   }
 
+  /**
+   * PB-017: record that a visit did not happen; the ticket stays open for a new time.
+   * POST /api/custodian/visits/:visitId/missed { reason, notes? }
+   */
   @Post('visits/:visitId/missed')
-  markMissed() {
-    notImplemented('PB-017');
+  @HttpCode(200)
+  markMissed(
+    @Param('visitId') visitId: string,
+    @Body(new ZodValidationPipe(MissedBody)) body: MissedBody,
+    @CurrentUser() user: AuthUser,
+    @Scope() scope: PropertyScope,
+  ) {
+    return this.visits.markMissed(visitId, body, user, scope);
   }
 }
