@@ -178,6 +178,32 @@ describe('PB-013 work queue', () => {
       expect(ids((await queue(`?q=${overdue.id}`)).tickets)).toEqual([overdue.id]);
     });
 
+    it('counts a reopened ticket from the reopen, even after it is scheduled again', async () => {
+      const again = await createTicket(t.prisma, away, {
+        reporter: away.residents[1],
+        item: 'Leaking tap', // MEDIUM: resolve within 72 h
+        status: S.SCHEDULED,
+        createdAt: ago(200),
+      });
+      await t.prisma.auditLog.create({
+        data: {
+          propertyId: away.property.id,
+          ticketId: again.id,
+          action: 'ticket.status_changed',
+          fromStatus: S.COMPLETED,
+          toStatus: S.REOPENED,
+          createdAt: ago(5),
+        },
+      });
+      const { tickets } = await queue(`?q=${again.id}`, away.custodian);
+      expect(tickets).toEqual([
+        expect.objectContaining({
+          id: again.id,
+          target: expect.objectContaining({ state: 'ON_TRACK' }),
+        }),
+      ]);
+    });
+
     it('limits the list but counts everything in the summary', async () => {
       const res = await queue('?limit=2');
       expect(ids(res.tickets)).toEqual([overdue.id, reviewed.id]);
@@ -198,7 +224,8 @@ describe('PB-013 work queue', () => {
     });
 
     it("only shows the caller's property, and only to staff", async () => {
-      expect(ids((await queue('', away.custodian)).tickets)).toEqual([elsewhere.id]);
+      expect(ids((await queue('', away.custodian)).tickets)).toContain(elsewhere.id);
+      expect(ids((await queue('', away.custodian)).tickets)).not.toContain(overdue.id);
       expect(ids((await queue('', home.admin)).tickets)).toHaveLength(4);
       await t.as(home.residents[0]).get('/custodian/queue').expect(403);
     });

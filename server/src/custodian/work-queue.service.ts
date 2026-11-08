@@ -174,9 +174,8 @@ export class WorkQueueService {
 
   private async toItems(rows: QueueRow[], propertyId: string): Promise<QueueItem[]> {
     const rules: TargetRule[] = await this.targets.rules(propertyId);
-    const reopened = await this.targets.reopenedAt(
-      rows.filter((r) => r.status === TicketStatus.REOPENED).map((r) => r.id),
-    );
+    // A reopened ticket's clock restarts at the reopen, whatever its status now.
+    const reopened = await this.targets.reopenedAt(rows.map((r) => r.id));
     const now = new Date();
 
     return rows.map((row) => {
