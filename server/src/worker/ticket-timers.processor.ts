@@ -1,13 +1,15 @@
 // Worker for ticket timers.
 //   auto-close         (PB-021, OWNER: Selina): COMPLETED for 48h without resident action -> CLOSED
-//   response-deadline  (response targets): still not attended at dueAt -> audit + alert admins
+//   response-deadline  (response targets, PB-012): still not attended at dueAt -> audit + alert
+//                      the assignee (or all custodians) and the admins (PB-024)
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
-import { Role, TicketStatus } from '@prisma/client';
+import { TicketStatus } from '@prisma/client';
 import type { Job } from 'bullmq';
 import { AuditService } from '../common/audit.service';
 import { canTransition } from '../common/ticket-status';
 import { APP_CONFIG, type AppConfig } from '../config/config';
+import { CustodianAlertsService } from '../notifications/custodian-alerts.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { QUEUES, TIMER_JOBS, type TicketTimerJob } from '../queue/queue.constants';
@@ -28,6 +30,7 @@ export class TicketTimersProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
+    private readonly alerts: CustodianAlertsService,
   ) {
     super();
   }
@@ -95,14 +98,7 @@ export class TicketTimersProcessor extends WorkerHost {
       action: 'ticket.response_target_missed',
       meta: { dueAt: ticket.dueAt?.toISOString() ?? null, status: ticket.status },
     });
-    const admins = await this.prisma.user.findMany({
-      where: { propertyId: ticket.propertyId, role: Role.ADMIN, isActive: true },
-      select: { id: true },
-    });
-    await this.notifications.notifyMany(
-      admins.map((a) => a.id),
-      { ticketId, title: 'Response target missed', body: `Ticket ${ticketId} is overdue.` },
-    );
+    await this.alerts.ticketBreached(ticketId);
     return 'missed';
   }
 }
