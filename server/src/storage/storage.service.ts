@@ -40,8 +40,22 @@ export class StorageService implements OnModuleInit {
         this.logger.warn(`Object storage unreachable (${(err as Error).name}); photos disabled`);
         return;
       }
+      await this.createBucket();
+    }
+  }
+
+  /**
+   * Several processes can start at once against an empty store (the API and the worker, or
+   * parallel test files) and all try to create the bucket: losing that race is fine.
+   */
+  private async createBucket() {
+    try {
       await this.s3.send(new CreateBucketCommand({ Bucket: this.bucket }));
       this.logger.log(`Created bucket ${this.bucket}`);
+    } catch (err) {
+      const name = (err as Error).name;
+      if (name === 'BucketAlreadyOwnedByYou' || name === 'BucketAlreadyExists') return;
+      this.logger.warn(`Could not create bucket ${this.bucket} (${name}); photos disabled`);
     }
   }
 
