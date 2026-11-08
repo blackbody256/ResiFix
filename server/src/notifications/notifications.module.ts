@@ -5,6 +5,7 @@ import { CustodianAlertsService } from './custodian-alerts.service';
 import { NotificationDeliveryService } from './notification-delivery.service';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
+import { ResidentUpdatesService } from './resident-updates.service';
 import { SmsService } from './sms.service';
 import { WebPushService } from './web-push.service';
 
@@ -16,7 +17,14 @@ import { WebPushService } from './web-push.service';
     SmsService,
     WebPushService,
     CustodianAlertsService, // PB-024
+    ResidentUpdatesService, // PB-023
   ],
-  exports: [NotificationsService, NotificationDeliveryService, SmsService, CustodianAlertsService],
+  exports: [
+    NotificationsService,
+    NotificationDeliveryService,
+    SmsService,
+    CustodianAlertsService,
+    ResidentUpdatesService,
+  ],
 })
 export class NotificationsModule {}
