@@ -34,7 +34,7 @@ const { worker } = loadConfig();
     TicketsModule,
     // OWNER: Andrew: PB-012..PB-018, PB-024
     CustodianModule,
-    // OWNER: Selina: PB-019, PB-021, PB-025..PB-029
+    // OWNER: Selina: PB-019, PB-020 (API), PB-021, PB-026..PB-029
     CompletionModule,
 
     // Queue consumers in-process for local dev; Docker runs them in the `worker` service.
