@@ -14,13 +14,8 @@ import { openChangeRequests, VISIT_EVENTS } from './change-requests';
 import { fieldError } from './field-error';
 import { kampalaTime } from './kampala-time';
 import { MINUTE_MS } from './response-targets';
-import {
-  describeTicket,
-  moveTicket,
-  TICKET_CONTEXT,
-  TicketActionsService,
-  updateIfUnchanged,
-} from './ticket-actions.service';
+import { moveTicket, TicketActionsService, updateIfUnchanged } from './ticket-actions.service';
+import { describeTicket, TICKET_CONTEXT } from './ticket-context';
 import { WorkQueueService } from './work-queue.service';
 
 const S = TicketStatus;
