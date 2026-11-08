@@ -44,12 +44,12 @@ export const ReviewBody = z.object({
 });
 export type ReviewBody = z.infer<typeof ReviewBody>;
 
-const TICKET_CONTEXT = {
+export const TICKET_CONTEXT = {
   room: { select: { number: true, block: { select: { name: true } } } },
   faultItem: { select: { name: true } },
 } satisfies Prisma.TicketInclude;
 
-type TicketWithContext = Prisma.TicketGetPayload<{ include: typeof TICKET_CONTEXT }>;
+export type TicketWithContext = Prisma.TicketGetPayload<{ include: typeof TICKET_CONTEXT }>;
 
 /** "Leaking tap, Block A 101": how notifications name a ticket. */
 export function describeTicket(t: TicketWithContext): string {

@@ -72,6 +72,8 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | POST   | `/custodian/tickets/:id/assign`     | CUSTODIAN, ADMIN | `{ assigneeId }`                                 | `{ ticket: QueueItem }` (PB-013)                                                     |
 | POST   | `/custodian/tickets/:id/review`     | CUSTODIAN, ADMIN | `{ faultItemId?, priority?, note? }`             | `{ ticket: QueueItem }` (PB-014)                                                     |
 | POST   | `/custodian/tickets/:id/visits`     | CUSTODIAN, ADMIN | `{ scheduledAt, custodianId?, notes? }`          | 201 `{ visit, ticket: QueueItem }` (PB-015)                                          |
+| PATCH  | `/custodian/visits/:visitId`        | CUSTODIAN, ADMIN | `{ scheduledAt, notes? }`                        | `{ visit, ticket: QueueItem }` (PB-016)                                              |
+| POST   | `/visits/:visitId/change-request`   | RESIDENT         | `{ message }`                                    | 201 `{ changeRequest: { visitId, message, requestedAt } }` (PB-016)                  |
 | GET    | `/notifications`                    | any              | –                                                | `{ notifications }`: caller's latest 50                                              |
 | GET    | `/notifications/push/public-key`    | public           | –                                                | `{ publicKey }` (null when Web Push is not configured)                               |
 | POST   | `/notifications/push/subscriptions` | any              | `PushSubscription.toJSON()`                      | `{ subscribed: true }`                                                               |
@@ -126,7 +128,8 @@ A `QueueItem` names the room, never the resident:
   faultItem: { id, name, category: { id, name } },
   assignee: { id, name } | null,
   photoCount,                                    // the resident's report photos
-  nextVisit: { id, scheduledAt, custodian: { id, name } } | null,
+  nextVisit: { id, scheduledAt, custodian: { id, name },
+               changeRequest: { message, requestedAt } | null } | null,
   lastMissedVisit: { id, scheduledAt } | null,   // when the latest visit was missed
   target: { clock, dueAt, respondBy, resolveBy, state, minutesLeft } | null,
   next: 'REVIEW' | 'SCHEDULE' | 'VISIT' | 'RESCHEDULE' | 'COMPLETE' | 'AWAIT_RESIDENT' }
@@ -157,6 +160,14 @@ A `QueueItem` names the room, never the resident:
 - The visitor is `custodianId`, else the ticket's assignee, else the caller if a custodian (else 400). An unassigned ticket is assigned to the visitor.
 - Notifies the resident with the time in Kampala time ("Tue 10 Nov, 4:00 pm"), and the visitor if someone else booked it. Not yet checked against the resident's availability: that waits for PB-008 to store it.
 - Audit action `visit.scheduled`, `meta: { visitId, scheduledAt, custodianId }`.
+
+### Request another time (PB-016)
+
+- `POST /visits/:visitId/change-request { message }` (resident): asks for a different time for the upcoming visit of a ticket they reported, before the visit is due (404 for anyone else's visit; 409 once it has happened or its time has passed). `message` (1 to 300 characters) says why and when suits them. One open request per visit (409). The visiting custodian and the assignee are notified. Audit action `visit.change_requested`, `meta: { visitId, message, scheduledAt }`.
+- In the work queue the visit shows `nextVisit.changeRequest: { message, requestedAt }` and the ticket's `next` is `RESCHEDULE`, until the visit is moved.
+- `PATCH /custodian/visits/:visitId { scheduledAt, notes? }` (staff): moves an upcoming visit (409 if it already happened), which also answers an open request. The resident is told the new time, and the visiting custodian if someone else moved it. The same time and notes is a no-op. Audit action `visit.rescheduled`, `meta: { visitId, from, to }`.
+
+A request is open while it is the latest `visit.*` audit event for its visit, so no extra table is needed.
 
 ### `GET /tickets/:id` (PB-010)
 

@@ -11,7 +11,7 @@
 //   [ ] PB-018  mark work in progress
 //   [ ] PB-024  custodian alerts for new, breached and reopened tickets:
 //               NotificationsService.notify()
-import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { z } from 'zod';
 import type { AuthUser } from '../auth/auth-user';
@@ -21,7 +21,7 @@ import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import type { PropertyScope } from '../common/property-scope';
 import { ResponseTargetsService } from './response-targets.service';
 import { ReviewBody, TicketActionsService } from './ticket-actions.service';
-import { ScheduleBody, VisitsService } from './visits.service';
+import { RescheduleBody, ScheduleBody, VisitsService } from './visits.service';
 import { QueueQuery, WorkQueueService } from './work-queue.service';
 
 const AssignBody = z.object({ assigneeId: z.string().min(1) });
@@ -94,6 +94,20 @@ export class CustodianController {
     @Scope() scope: PropertyScope,
   ) {
     return this.visits.schedule(id, body, user, scope);
+  }
+
+  /**
+   * PB-016: move an upcoming visit, e.g. after the resident asked for another time.
+   * PATCH /api/custodian/visits/:visitId { scheduledAt, notes? }
+   */
+  @Patch('visits/:visitId')
+  reschedule(
+    @Param('visitId') visitId: string,
+    @Body(new ZodValidationPipe(RescheduleBody)) body: RescheduleBody,
+    @CurrentUser() user: AuthUser,
+    @Scope() scope: PropertyScope,
+  ) {
+    return this.visits.reschedule(visitId, body, user, scope);
   }
 
   @Post('visits/:visitId/missed')
