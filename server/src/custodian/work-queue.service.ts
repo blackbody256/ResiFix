@@ -8,6 +8,7 @@ import type { AuthUser } from '../auth/auth-user';
 import { notFound } from '../common/app-exception';
 import type { PropertyScope } from '../common/property-scope';
 import { PrismaService } from '../prisma/prisma.service';
+import { type ChangeRequest, openChangeRequests } from './change-requests';
 import {
   OPEN_STATUSES,
   pickTarget,
@@ -63,7 +64,7 @@ export type NextStep =
   | 'REVIEW' // confirm or correct the category (PB-014)
   | 'SCHEDULE' // agree a visit (PB-015)
   | 'VISIT' // a visit is booked: start work (PB-018) or record it missed (PB-017)
-  | 'RESCHEDULE' // the last visit was missed, or none is booked
+  | 'RESCHEDULE' // the last visit was missed, none is booked, or the resident asked to move it
   | 'COMPLETE' // work started: upload proof of repair (PB-019)
   | 'AWAIT_RESIDENT'; // repaired: waiting for the resident to confirm (PB-020)
 
@@ -102,7 +103,13 @@ export interface QueueItem {
   faultItem: QueueRow['faultItem'];
   assignee: { id: string; name: string } | null;
   photoCount: number;
-  nextVisit: { id: string; scheduledAt: Date; custodian: { id: string; name: string } } | null;
+  nextVisit: {
+    id: string;
+    scheduledAt: Date;
+    custodian: { id: string; name: string };
+    /** PB-016: the resident asked for another time and the visit has not been moved yet. */
+    changeRequest: ChangeRequest | null;
+  } | null;
   lastMissedVisit: { id: string; scheduledAt: Date } | null;
   target: TargetStatus | null;
   next: NextStep;
@@ -176,6 +183,10 @@ export class WorkQueueService {
     const rules: TargetRule[] = await this.targets.rules(propertyId);
     // A reopened ticket's clock restarts at the reopen, whatever its status now.
     const reopened = await this.targets.reopenedAt(rows.map((r) => r.id));
+    const requests = await openChangeRequests(
+      this.prisma,
+      rows.map((r) => r.id),
+    );
     const now = new Date();
 
     return rows.map((row) => {
@@ -201,6 +212,7 @@ export class WorkQueueService {
           id: nextVisit.id,
           scheduledAt: nextVisit.scheduledAt,
           custodian: nextVisit.custodian,
+          changeRequest: requests.get(nextVisit.id) ?? null,
         },
         lastMissedVisit: lastMissedVisit && {
           id: lastMissedVisit.id,
@@ -215,7 +227,10 @@ export class WorkQueueService {
           },
           now,
         ),
-        next: nextStep(row.status, Boolean(nextVisit)),
+        next:
+          nextVisit && requests.has(nextVisit.id)
+            ? 'RESCHEDULE'
+            : nextStep(row.status, Boolean(nextVisit)),
       };
     });
   }
