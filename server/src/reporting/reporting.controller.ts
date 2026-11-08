@@ -1,10 +1,13 @@
 // OWNER: Amabe / Ayan
 // TODO:
-//   [ ] PB-005  resident reports a fault (create ticket)
-//   [ ] PB-006  attach photos: upload endpoint works; add client UI and limits per ticket
-//   [x] PB-007  photos served via expiring presigned links
-//   [ ] PB-008
-//   [ ] PB-009
+//   [ ] PB-005  report a room fault: create a ticket with a unique reference (UI by Ayan).
+//               After creating it: ResponseTargetsService.startClock(id) (import CustodianModule)
+//               and CustodianAlertsService.ticketReported(id) (NotificationsModule)
+//   [ ] PB-006  report a shared-facility fault (UI by Ayan)
+//   [ ] PB-007  upload up to two photos: upload and presigned links work; still to do: the
+//               limit of two per ticket, on-device compression in the UI (Ayan)
+//   [ ] PB-008  provide availability for scheduling (UI by Ayan)
+//   [ ] PB-009  follow a shared fault instead of reporting a duplicate
 import { Controller, Get, Param, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { type Prisma, PhotoKind, Role } from '@prisma/client';

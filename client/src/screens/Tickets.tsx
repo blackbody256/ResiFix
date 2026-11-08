@@ -1,4 +1,4 @@
-// OWNER: Ayan: PB-010, PB-011, PB-020, PB-022, PB-023. Ticket list, detail, review.
+// OWNER: Ayan: PB-010, PB-011, PB-020, PB-022, PB-023. Ticket list, detail, timeline.
 // The detail view lives at /tickets?focus=<id>: the same link Web Push notifications open.
 import type { ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
