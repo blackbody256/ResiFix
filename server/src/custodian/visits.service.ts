@@ -1,5 +1,5 @@
 // Repair visits: PB-015 schedule, PB-016 the resident asks for another time and the custodian
-// moves the visit, PB-017 a visit that did not happen. Same pattern as TicketActionsService: load in scope, check the lifecycle,
+// moves the visit, PB-017 a visit that did not happen, PB-018 the custodian arrives and starts work. Same pattern as TicketActionsService: load in scope, check the lifecycle,
 // conditional update + audit in one transaction, notify after the commit.
 import { Injectable } from '@nestjs/common';
 import { type Prisma, Role, TicketStatus } from '@prisma/client';
@@ -83,6 +83,13 @@ function missedMessage(reason: MissedReason, when: string, notes?: string): stri
       return `The visit at ${when} did not go ahead: ${notes}. ${open}`;
   }
 }
+
+/** PB-018: optionally name the visit being attended (default: the next upcoming one). */
+export const StartBody = z.object({ visitId: z.string().min(1).optional() }).default({}); // the body is optional
+export type StartBody = z.infer<typeof StartBody>;
+
+/** Starting work moves these to IN_PROGRESS. */
+const STARTABLE: readonly TicketStatus[] = [S.SCHEDULED, S.ASSIGNED];
 
 /** PB-016: the resident says why, and when suits them instead. */
 export const ChangeRequestBody = z.object({ message: z.string().trim().min(1).max(300) });
@@ -362,6 +369,87 @@ export class VisitsService {
       body: `${describeTicket(ticket)}. ${missedMessage(input.reason, kampalaTime(visit.scheduledAt), input.notes)}`,
     });
     return { visit: await this.visit(visit.id), ticket: await this.queue.item(ticket.id, scope) };
+  }
+
+  /**
+   * PB-018: the custodian is at the room and starts the repair. Records arrival on the upcoming
+   * visit (or `visitId`); with no visit booked (an assigned ticket, or after a missed visit) it is
+   * a walk-in and the visit is created on the spot, so every attempt is on record. SCHEDULED /
+   * ASSIGNED -> IN_PROGRESS; on an IN_PROGRESS ticket it records arrival for a follow-up visit.
+   * Arrival is what meets the response target. The resident is told work has started.
+   */
+  async start(ticketId: string, input: StartBody, user: AuthUser, scope: PropertyScope) {
+    const ticket = await this.actions.load(ticketId, scope);
+    if (ticket.status === S.REPORTED) throw conflict('Review the ticket before starting work');
+    if (ticket.status === S.REVIEWED || ticket.status === S.REOPENED) {
+      throw conflict('Assign the ticket or book a visit before starting work');
+    }
+    const toInProgress = STARTABLE.includes(ticket.status);
+    if (!toInProgress && ticket.status !== S.IN_PROGRESS) {
+      throw conflict(`Work cannot start on a ${ticket.status} ticket`);
+    }
+
+    const visit = input.visitId
+      ? await this.prisma.visit.findFirst({ where: { id: input.visitId, ticketId: ticket.id } })
+      : await this.prisma.visit.findFirst({
+          where: { ticketId: ticket.id, arrivedAt: null, missed: false },
+          orderBy: { scheduledAt: 'asc' },
+        });
+    if (input.visitId && !visit) throw notFound('Visit not found');
+    if (visit && (visit.arrivedAt || visit.missed)) {
+      throw conflict('This visit has already been recorded');
+    }
+    if (!visit && !toInProgress) {
+      throw conflict('Work is already in progress. Book a follow-up visit to record another one.');
+    }
+
+    const custodianId =
+      visit?.custodianId ??
+      ticket.assigneeId ??
+      (user.role === Role.CUSTODIAN ? user.id : undefined);
+    if (!custodianId) throw conflict('Assign the ticket before starting work');
+
+    const now = new Date();
+    const visitId = await this.prisma.$transaction(async (tx) => {
+      if (toInProgress) {
+        await moveTicket(tx, ticket, S.IN_PROGRESS, {
+          assigneeId: ticket.assigneeId ?? custodianId,
+        });
+      }
+      let id: string;
+      if (visit) {
+        const { count } = await tx.visit.updateMany({
+          where: { id: visit.id, arrivedAt: null, missed: false },
+          data: { arrivedAt: now },
+        });
+        if (count === 0) throw conflict('Someone else updated this visit. Reload and try again.');
+        id = visit.id;
+      } else {
+        ({ id } = await tx.visit.create({
+          data: { ticketId: ticket.id, custodianId, scheduledAt: now, arrivedAt: now },
+        }));
+      }
+      await this.audit.record(
+        {
+          propertyId: ticket.propertyId,
+          actorId: user.id,
+          ticketId: ticket.id,
+          action: VISIT_EVENTS.ARRIVED,
+          ...(toInProgress ? { fromStatus: ticket.status, toStatus: S.IN_PROGRESS } : {}),
+          meta: { visitId: id, walkIn: !visit },
+        },
+        tx,
+      );
+      return id;
+    });
+
+    await this.notifications.notify({
+      userId: ticket.reporterId,
+      ticketId: ticket.id,
+      title: 'Repair started',
+      body: `${describeTicket(ticket)}: the custodian has started work.`,
+    });
+    return { visit: await this.visit(visitId), ticket: await this.queue.item(ticket.id, scope) };
   }
 
   private visit(id: string) {
