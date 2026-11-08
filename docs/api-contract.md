@@ -75,6 +75,7 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | PATCH  | `/custodian/visits/:visitId`        | CUSTODIAN, ADMIN | `{ scheduledAt, notes? }`                        | `{ visit, ticket: QueueItem }` (PB-016)                                              |
 | POST   | `/visits/:visitId/change-request`   | RESIDENT         | `{ message }`                                    | 201 `{ changeRequest: { visitId, message, requestedAt } }` (PB-016)                  |
 | POST   | `/custodian/visits/:visitId/missed` | CUSTODIAN, ADMIN | `{ reason, notes? }`                             | `{ visit, ticket: QueueItem }` (PB-017)                                              |
+| POST   | `/custodian/tickets/:id/start`      | CUSTODIAN, ADMIN | `{ visitId? }` (body optional)                   | `{ visit, ticket: QueueItem }` (PB-018)                                              |
 | GET    | `/notifications`                    | any              | –                                                | `{ notifications }`: caller's latest 50                                              |
 | GET    | `/notifications/push/public-key`    | public           | –                                                | `{ publicKey }` (null when Web Push is not configured)                               |
 | POST   | `/notifications/push/subscriptions` | any              | `PushSubscription.toJSON()`                      | `{ subscribed: true }`                                                               |
@@ -92,7 +93,7 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | POST   | `/completion/tickets/:id/verify`       | RESIDENT         | PB-020         |
 | POST   | `/completion/tickets/:id/rating`       | RESIDENT         | PB-022         |
 
-Backlog IDs and titles match the ClickUp board. Stories with no stub yet (PB-012, PB-016, PB-018, PB-024 and others) add their endpoints to this file in the PR that builds them.
+Backlog IDs and titles match the ClickUp board. Stories with no stub yet add their endpoints to this file in the PR that builds them.
 
 ### Response targets and breach flags (PB-012)
 
@@ -178,6 +179,27 @@ A request is open while it is the latest `visit.*` audit event for its visit, so
 - The ticket keeps its status (`SCHEDULED`, or `IN_PROGRESS` for a follow-up visit); in the work queue it shows `lastMissedVisit` and `next: 'RESCHEDULE'`. Book the new time with PB-015.
 - The resident is told what happened and that the ticket stays open; `notes` are shared with them.
 - Audit action `visit.missed`, `meta: { visitId, reason, scheduledAt, notes? }`.
+
+### Mark work in progress (PB-018)
+
+`POST /custodian/tickets/:id/start { visitId? }`: the custodian has arrived and starts the repair.
+
+- Records `arrivedAt` on the upcoming visit (or on `visitId`, which must be an upcoming visit of this ticket). With no visit booked (an `ASSIGNED` ticket, or after a missed visit) it is a walk-in: a visit is created with `scheduledAt = arrivedAt = now`, so every attempt is on record.
+- `SCHEDULED` or `ASSIGNED` -> `IN_PROGRESS`. On an `IN_PROGRESS` ticket it records arrival for a booked follow-up visit; with none booked it is a 409. `REPORTED`, `REVIEWED` and `REOPENED` need a review, assignment or booking first, and finished tickets cannot start (409).
+- Arrival is what the response target counts as the response. The resident is told work has started.
+- Audit action `visit.arrived` (with the status change when there is one), `meta: { visitId, walkIn }`.
+
+### Custodian alerts (PB-024)
+
+`CustodianAlertsService` (exported by `NotificationsModule`) sends in-app, Web Push and SMS-fallback alerts to active staff of the ticket's property:
+
+| Call                       | Who calls it                                              | Who is alerted                                            |
+| -------------------------- | --------------------------------------------------------- | --------------------------------------------------------- |
+| `ticketReported(ticketId)` | PB-005, right after creating a ticket                     | every custodian of the property (the admins if none)      |
+| `ticketBreached(ticketId)` | the `response-deadline` job, when the respond time passes | the assignee (or every custodian if none), and the admins |
+| `ticketReopened(ticketId)` | PB-020, right after a resident reopens a ticket           | the assignee (or every custodian if none), and the admins |
+
+PB-005 and PB-020 should also call `ResponseTargetsService.startClock(ticketId)` (exported by `CustodianModule`), which sets `dueAt` and schedules the breach alert.
 
 ### `GET /tickets/:id` (PB-010)
 

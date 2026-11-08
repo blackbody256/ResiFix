@@ -9,8 +9,8 @@
 //   [ ] PB-016  resident requests another time for a scheduled visit
 //   [ ] PB-017  record a missed visit; the ticket stays open for rescheduling
 //   [ ] PB-018  mark work in progress
-//   [ ] PB-024  custodian alerts for new, breached and reopened tickets:
-//               NotificationsService.notify()
+//   [ ] PB-024  custodian alerts for new, breached and reopened tickets: CustodianAlertsService
+//               (notifications module); breach alerts come from the response-deadline job
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { z } from 'zod';
@@ -20,7 +20,13 @@ import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import type { PropertyScope } from '../common/property-scope';
 import { ResponseTargetsService } from './response-targets.service';
 import { ReviewBody, TicketActionsService } from './ticket-actions.service';
-import { MissedBody, RescheduleBody, ScheduleBody, VisitsService } from './visits.service';
+import {
+  MissedBody,
+  RescheduleBody,
+  ScheduleBody,
+  StartBody,
+  VisitsService,
+} from './visits.service';
 import { QueueQuery, WorkQueueService } from './work-queue.service';
 
 const AssignBody = z.object({ assigneeId: z.string().min(1) });
@@ -93,6 +99,21 @@ export class CustodianController {
     @Scope() scope: PropertyScope,
   ) {
     return this.visits.schedule(id, body, user, scope);
+  }
+
+  /**
+   * PB-018: the custodian has arrived and starts the repair.
+   * POST /api/custodian/tickets/:id/start { visitId? }
+   */
+  @Post('tickets/:id/start')
+  @HttpCode(200)
+  start(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(StartBody)) body: StartBody,
+    @CurrentUser() user: AuthUser,
+    @Scope() scope: PropertyScope,
+  ) {
+    return this.visits.start(id, body, user, scope);
   }
 
   /**
