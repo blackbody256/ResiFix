@@ -9,8 +9,8 @@
 //   [ ] PB-016  resident requests another time for a scheduled visit
 //   [ ] PB-017  record a missed visit; the ticket stays open for rescheduling
 //   [ ] PB-018  mark work in progress
-//   [ ] PB-024  custodian alerts for new, breached and reopened tickets:
-//               NotificationsService.notify()
+//   [ ] PB-024  custodian alerts for new, breached and reopened tickets: CustodianAlertsService
+//               (notifications module); breach alerts come from the response-deadline job
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { z } from 'zod';

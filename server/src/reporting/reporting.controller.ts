@@ -1,6 +1,8 @@
 // OWNER: Amabe / Ayan
 // TODO:
-//   [ ] PB-005  report a room fault: create a ticket with a unique reference (UI by Ayan)
+//   [ ] PB-005  report a room fault: create a ticket with a unique reference (UI by Ayan).
+//               After creating it: ResponseTargetsService.startClock(id) (import CustodianModule)
+//               and CustodianAlertsService.ticketReported(id) (NotificationsModule)
 //   [ ] PB-006  report a shared-facility fault (UI by Ayan)
 //   [ ] PB-007  upload up to two photos: upload and presigned links work; still to do: the
 //               limit of two per ticket, on-device compression in the UI (Ayan)

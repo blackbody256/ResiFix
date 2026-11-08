@@ -16,6 +16,7 @@ import { assertTransition } from '../common/ticket-status';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { fieldError } from './field-error';
+import { describeTicket, TICKET_CONTEXT, type TicketWithContext } from './ticket-context';
 import { AWAITING_RESPONSE } from './response-targets';
 import { ResponseTargetsService } from './response-targets.service';
 import { WorkQueueService } from './work-queue.service';
@@ -43,18 +44,6 @@ export const ReviewBody = z.object({
   note: z.string().trim().min(1).max(500).optional(),
 });
 export type ReviewBody = z.infer<typeof ReviewBody>;
-
-export const TICKET_CONTEXT = {
-  room: { select: { number: true, block: { select: { name: true } } } },
-  faultItem: { select: { name: true } },
-} satisfies Prisma.TicketInclude;
-
-export type TicketWithContext = Prisma.TicketGetPayload<{ include: typeof TICKET_CONTEXT }>;
-
-/** "Leaking tap, Block A 101": how notifications name a ticket. */
-export function describeTicket(t: TicketWithContext): string {
-  return `${t.faultItem.name}, ${t.room.block.name} ${t.room.number}`;
-}
 
 /**
  * Moves a ticket from the status we read to `to`, failing with 409 if that is not an allowed
