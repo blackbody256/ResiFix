@@ -20,7 +20,7 @@ import { CurrentUser, Roles, Scope } from '../common/decorators';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import type { PropertyScope } from '../common/property-scope';
 import { ResponseTargetsService } from './response-targets.service';
-import { TicketActionsService } from './ticket-actions.service';
+import { ReviewBody, TicketActionsService } from './ticket-actions.service';
 import { QueueQuery, WorkQueueService } from './work-queue.service';
 
 const AssignBody = z.object({ assigneeId: z.string().min(1) });
@@ -53,9 +53,19 @@ export class CustodianController {
     return this.workQueue.queue(user, scope, query);
   }
 
+  /**
+   * PB-014: confirm a report, or correct its fault and priority.
+   * POST /api/custodian/tickets/:id/review { faultItemId?, priority?, note? }
+   */
   @Post('tickets/:id/review')
-  review() {
-    notImplemented('PB-014');
+  @HttpCode(200)
+  async review(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(ReviewBody)) body: ReviewBody,
+    @CurrentUser() user: AuthUser,
+    @Scope() scope: PropertyScope,
+  ) {
+    return { ticket: await this.actions.review(id, body, user, scope) };
   }
 
   /** PB-013: give a ticket to a custodian. POST /api/custodian/tickets/:id/assign { assigneeId } */
