@@ -71,6 +71,7 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | GET    | `/custodian/queue`                  | CUSTODIAN, ADMIN | query, see below                                 | `{ tickets: QueueItem[], summary }` (PB-013)                                         |
 | POST   | `/custodian/tickets/:id/assign`     | CUSTODIAN, ADMIN | `{ assigneeId }`                                 | `{ ticket: QueueItem }` (PB-013)                                                     |
 | POST   | `/custodian/tickets/:id/review`     | CUSTODIAN, ADMIN | `{ faultItemId?, priority?, note? }`             | `{ ticket: QueueItem }` (PB-014)                                                     |
+| POST   | `/custodian/tickets/:id/visits`     | CUSTODIAN, ADMIN | `{ scheduledAt, custodianId?, notes? }`          | 201 `{ visit, ticket: QueueItem }` (PB-015)                                          |
 | GET    | `/notifications`                    | any              | –                                                | `{ notifications }`: caller's latest 50                                              |
 | GET    | `/notifications/push/public-key`    | public           | –                                                | `{ publicKey }` (null when Web Push is not configured)                               |
 | POST   | `/notifications/push/subscriptions` | any              | `PushSubscription.toJSON()`                      | `{ subscribed: true }`                                                               |
@@ -84,7 +85,6 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | POST   | `/properties/blocks/:blockId/rooms`    | ADMIN            | PB-003         |
 | POST   | `/properties/occupancies`              | ADMIN            | PB-004         |
 | POST   | `/reporting/tickets`                   | RESIDENT         | PB-005, PB-006 |
-| POST   | `/custodian/tickets/:id/visits`        | CUSTODIAN, ADMIN | PB-015         |
 | POST   | `/custodian/visits/:visitId/missed`    | CUSTODIAN, ADMIN | PB-017         |
 | POST   | `/completion/tickets/:id/repair-proof` | CUSTODIAN, ADMIN | PB-019         |
 | POST   | `/completion/tickets/:id/verify`       | RESIDENT         | PB-020         |
@@ -146,6 +146,17 @@ A `QueueItem` names the room, never the resident:
 - The resident's `description` is never changed. `note` (up to 500 characters) records what the custodian found.
 - While the ticket still waits for a response, its respond clock restarts for the new category and priority (`startClock`).
 - Audit action `ticket.reviewed` (with the status change) or `ticket.reclassified`, `meta: { faultItem?: { from, to }, priority?: { from, to }, note? }`.
+
+### Schedule a repair visit (PB-015)
+
+`POST /custodian/tickets/:id/visits { scheduledAt, custodianId?, notes? }` -> 201 `{ visit: { id, scheduledAt, arrivedAt, missed, notes, custodian }, ticket: QueueItem }`
+
+- `scheduledAt` is ISO 8601 with an offset (`2026-11-10T16:00:00+03:00`), from now to 60 days ahead.
+- `REVIEWED`, `ASSIGNED` and `REOPENED` tickets become `SCHEDULED`. A `SCHEDULED` ticket whose visit was missed, or an `IN_PROGRESS` ticket needing a follow-up, gets another visit and keeps its status. `REPORTED` needs a review first; finished tickets cannot get visits (409).
+- One upcoming visit per ticket (409 otherwise): move it with PB-016 rather than booking a second.
+- The visitor is `custodianId`, else the ticket's assignee, else the caller if a custodian (else 400). An unassigned ticket is assigned to the visitor.
+- Notifies the resident with the time in Kampala time ("Tue 10 Nov, 4:00 pm"), and the visitor if someone else booked it. Not yet checked against the resident's availability: that waits for PB-008 to store it.
+- Audit action `visit.scheduled`, `meta: { visitId, scheduledAt, custodianId }`.
 
 ### `GET /tickets/:id` (PB-010)
 

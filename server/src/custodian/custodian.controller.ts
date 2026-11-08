@@ -21,6 +21,7 @@ import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import type { PropertyScope } from '../common/property-scope';
 import { ResponseTargetsService } from './response-targets.service';
 import { ReviewBody, TicketActionsService } from './ticket-actions.service';
+import { ScheduleBody, VisitsService } from './visits.service';
 import { QueueQuery, WorkQueueService } from './work-queue.service';
 
 const AssignBody = z.object({ assigneeId: z.string().min(1) });
@@ -32,6 +33,7 @@ export class CustodianController {
     private readonly targets: ResponseTargetsService,
     private readonly workQueue: WorkQueueService,
     private readonly actions: TicketActionsService,
+    private readonly visits: VisitsService,
   ) {}
 
   /** PB-012: the response targets in force for the caller's property. GET /api/custodian/targets */
@@ -80,9 +82,18 @@ export class CustodianController {
     return { ticket: await this.actions.assign(id, body.assigneeId, user, scope) };
   }
 
+  /**
+   * PB-015: book a repair visit and tell the resident.
+   * POST /api/custodian/tickets/:id/visits { scheduledAt, custodianId?, notes? }
+   */
   @Post('tickets/:id/visits')
-  scheduleVisit() {
-    notImplemented('PB-015');
+  scheduleVisit(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(ScheduleBody)) body: ScheduleBody,
+    @CurrentUser() user: AuthUser,
+    @Scope() scope: PropertyScope,
+  ) {
+    return this.visits.schedule(id, body, user, scope);
   }
 
   @Post('visits/:visitId/missed')
