@@ -64,7 +64,7 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | GET    | `/properties/mine`                  | any      | –                                                | `{ property: { ..., blocks: [{ ..., rooms }] } }`            |
 | GET    | `/reporting/fault-categories`       | any      | –                                                | `{ categories: [{ ..., items }] }`                           |
 | POST   | `/reporting/tickets/:id/photos`     | RESIDENT | multipart, field `photo` (JPEG/PNG/WebP, ≤ 5 MB) | `{ photo: { id, kind, createdAt } }`                         |
-| GET    | `/reporting/photos/:photoId/link`   | any      | –                                                | `{ url, expiresAt }`: presigned GET link (PB-007)            |
+| GET    | `/reporting/photos/:photoId/link`   | any      | –                                                | `{ url, expiresAt }`: presigned link; residents: own tickets |
 | GET    | `/tickets`                          | any      | –                                                | `{ tickets }`. Residents see only their own tickets.         |
 | GET    | `/tickets/:id`                      | any      | –                                                | `{ ticket }` with photos, visits, proof, `timeline` (PB-010) |
 | GET    | `/notifications`                    | any      | –                                                | `{ notifications }`: caller's latest 50                      |
