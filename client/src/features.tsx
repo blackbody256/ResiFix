@@ -26,7 +26,7 @@ export const features: Feature[] = [
     roles: ['CUSTODIAN', 'ADMIN'],
     element: <Custodian />,
   },
-  // OWNER: Selina: PB-019, PB-021, PB-025..PB-029
+  // OWNER: Selina: PB-019, PB-020 (API), PB-021, PB-026..PB-029
   { path: '/completion', label: 'Confirm', roles: ['RESIDENT'], element: <Completion /> },
   // OWNER: Amabe: PB-003, PB-004
   { path: '/properties', label: 'Property', roles: ['ADMIN'], element: <Properties /> },

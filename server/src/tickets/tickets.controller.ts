@@ -1,14 +1,14 @@
 // OWNER: Ayan
 // TODO:
-//   [x] PB-010  ticket detail
-//   [ ] PB-011  admin review: on REVIEWED call TicketTimersService.scheduleResponseDeadline()
-//   [ ] PB-020  status changes: assertTransition() + AuditService.record() in one $transaction
-//   [ ] PB-022
-//   [ ] PB-023  notifications on status change: NotificationsService.notify()
-import { Controller, Get, Param, Post } from '@nestjs/common';
-import { Role } from '@prisma/client';
-import { notImplemented } from '../common/app-exception';
-import { CurrentUser, Roles, Scope } from '../common/decorators';
+//   [x] PB-010  my tickets list (and the ticket detail)
+//   [ ] PB-011  ticket timeline: shown in the detail, built from the audit log
+//   [ ] PB-020  UI for resident verification (API: Selina, POST /completion/tickets/:id/verify)
+//   [ ] PB-022  rate the service (endpoint stub: POST /completion/tickets/:id/rating)
+//   [ ] PB-023  student notifications on ticket updates: NotificationsService.notify()
+// Status changes happen in the endpoint of the story that makes them (review, schedule, proof,
+// verify), each with assertTransition() + AuditService.record() in one $transaction.
+import { Controller, Get, Param } from '@nestjs/common';
+import { CurrentUser, Scope } from '../common/decorators';
 import type { PropertyScope } from '../common/property-scope';
 import type { AuthUser } from '../auth/auth-user';
 import { TicketsService } from './tickets.service';
@@ -31,17 +31,5 @@ export class TicketsController {
     @Scope() scope: PropertyScope,
   ) {
     return { ticket: await this.tickets.detail(id, user, scope) };
-  }
-
-  @Post(':id/review')
-  @Roles(Role.ADMIN)
-  review() {
-    notImplemented('PB-011');
-  }
-
-  @Post(':id/status')
-  @Roles(Role.ADMIN, Role.CUSTODIAN)
-  changeStatus() {
-    notImplemented('PB-020');
   }
 }

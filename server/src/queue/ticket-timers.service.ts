@@ -1,7 +1,7 @@
 // Producer for ticket timers. Feature modules call these; the worker runs the jobs.
-//   - scheduleResponseDeadline: when an admin reviews a ticket (PB-011), using ResponseTarget
-//   - scheduleAutoClose: when a ticket reaches COMPLETED (PB-018)  -> closes after 48h (PB-021)
-//   - cancelAutoClose: when the resident confirms or disputes (PB-019)
+//   - scheduleResponseDeadline: when a custodian reviews a ticket (PB-014), using ResponseTarget
+//   - scheduleAutoClose: when a ticket reaches COMPLETED (PB-019)  -> closes after 48h (PB-021)
+//   - cancelAutoClose: when the resident confirms or disputes (PB-020)
 import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
