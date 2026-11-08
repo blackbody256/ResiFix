@@ -3,10 +3,12 @@
 //   const t = await startApp();
 //   await t.as(user).get('/tickets').expect(200);
 //   await t.close();
+import { getQueueToken } from '@nestjs/bullmq';
 import type { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import type { User } from '@prisma/client';
+import type { Queue } from 'bullmq';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import type { JwtPayload } from '../src/auth/auth.service';
@@ -21,6 +23,8 @@ export interface TestApp {
   anon(): ApiClient;
   /** Requests as `user`, with a JWT signed by the app's own JwtService. */
   as(user: Caller): ApiClient;
+  /** A BullMQ queue, to check what was scheduled: `t.queue(QUEUES.NOTIFICATIONS).getJobs()`. */
+  queue(name: string): Queue;
   close(): Promise<void>;
 }
 
@@ -65,6 +69,7 @@ export async function startApp(): Promise<TestApp> {
       }
       return client(token);
     },
+    queue: (name) => app.get<Queue>(getQueueToken(name), { strict: false }),
     close: () => app.close(),
   };
 }
