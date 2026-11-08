@@ -206,8 +206,9 @@ PB-005 and PB-020 should also call `ResponseTargetsService.startClock(ticketId)`
 Same visibility as the list: residents get **404** for tickets they did not report; staff see any ticket in their property. The `ticket` object has the ticket's own fields plus:
 
 - `room` (with `block`), `faultItem` (with `category`), `reporter { id, name, phone }`, `assignee { id, name, role } | null`
-- `photos`: the resident's report photos, `[{ id, kind, url, urlExpiresAt, createdAt }]`. `url` is a presigned link; fetch the ticket again after `urlExpiresAt`.
-- `visits` (with `custodian`), `repairProofs` (with `submittedBy` and their own `photos`), `verifications` (with `user`), `rating`
-- `timeline`: the ticket's audit log, oldest first, `[{ id, action, fromStatus, toStatus, actor, meta, createdAt }]`
+- `photos`: the resident's report photos (`kind: REPORT`), `[{ id, kind, url, urlExpiresAt, createdAt }]`. `url` is a presigned link; fetch the ticket again after `urlExpiresAt`.
+- `visits` (with `custodian`), `repairProofs` (with `submittedBy` and their own `photos`), `verifications` (with `user`)
+- `rating`: **residents only** (their own ticket). Staff never get an individual rating; managers see rating totals in analytics (Deliverable 4).
+- `timeline` (PB-011): the ticket's audit log, oldest first, `[{ id, action, fromStatus, toStatus, actor, createdAt }]`. The raw audit `meta` is never sent.
 
 The stub paths are a starting point. Owners can rename or reshape them, but must update this table in the same PR.
