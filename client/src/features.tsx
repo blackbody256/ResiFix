@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import type { Role } from './lib/session';
 import { Completion } from './screens/Completion';
 import { Custodian } from './screens/Custodian';
+import { Notifications } from './screens/Notifications';
 import { Properties } from './screens/Properties';
 import { Reporting } from './screens/Reporting';
 import { Tickets } from './screens/Tickets';
@@ -19,6 +20,8 @@ export const features: Feature[] = [
   { path: '/report', label: 'Report', roles: ['RESIDENT'], element: <Reporting /> },
   // OWNER: Ayan: PB-010, PB-011, PB-020, PB-022, PB-023
   { path: '/tickets', label: 'Tickets', element: <Tickets /> },
+  // OWNER: Ayan: PB-023 (every role: staff alerts from PB-024 land here too)
+  { path: '/notifications', label: 'Updates', element: <Notifications /> },
   // OWNER: Andrew: PB-012..PB-018, PB-024
   {
     path: '/custodian',
