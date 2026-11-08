@@ -66,6 +66,15 @@ describe('targetStatus', () => {
     });
   });
 
+  it('ignores a respond-by time from before the clock (re)started', () => {
+    // dueAt was set for the original report; the ticket was reopened 100 h later.
+    const reopened = targetStatus(
+      { status: S.REOPENED, clockStart: at(100), dueAt: at(12), rule: high },
+      at(101),
+    );
+    expect(reopened).toMatchObject({ respondBy: at(112), state: 'ON_TRACK' });
+  });
+
   it('reports minutes left', () => {
     expect(status(S.SCHEDULED, 47)?.minutesLeft).toBe(60);
   });

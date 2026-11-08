@@ -82,7 +82,10 @@ export interface TargetInput {
   status: TicketStatus;
   /** When the ticket was reported, or last reopened. */
   clockStart: Date;
-  /** Ticket.dueAt: the respond-by time set at review. Wins over the computed one when present. */
+  /**
+   * Ticket.dueAt: the respond-by time set by startClock(). Wins over the computed one, unless it
+   * is from before the clock (re)started, e.g. a reopen nobody restarted the clock for.
+   */
   dueAt?: Date | null;
   rule: TargetRule | undefined;
 }
@@ -92,7 +95,8 @@ export function targetStatus(input: TargetInput, now: Date = new Date()): Target
   const { status, clockStart, rule } = input;
   if (!rule || !OPEN_STATUSES.includes(status)) return null;
 
-  const respond = input.dueAt ?? respondBy(rule, clockStart);
+  const stored = input.dueAt && input.dueAt.getTime() > clockStart.getTime() ? input.dueAt : null;
+  const respond = stored ?? respondBy(rule, clockStart);
   const resolve = new Date(clockStart.getTime() + rule.resolveWithinH * HOUR_MS);
   const clock = AWAITING_RESPONSE.includes(status) ? 'RESPOND' : 'RESOLVE';
   const dueAt = clock === 'RESPOND' ? respond : resolve;
