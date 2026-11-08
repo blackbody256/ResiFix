@@ -4,17 +4,18 @@ Five people are building this in parallel, so most of these rules exist to stop 
 
 ## Who owns what
 
-| Area          | Server module (NestJS)     | Client screen                  | Owner         | Backlog                                |
-| ------------- | -------------------------- | ------------------------------ | ------------- | -------------------------------------- |
-| Auth          | `server/src/auth`          | `client/src/screens/Login.tsx` | Ann           | PB-001, PB-002                         |
-| Properties    | `server/src/properties`    | `screens/Properties.tsx`       | Amabe         | PB-003, PB-004                         |
-| Reporting     | `server/src/reporting`     | `screens/Reporting.tsx`        | Amabe / Ayan  | PB-005..PB-009                         |
-| Tickets       | `server/src/tickets`       | `screens/Tickets.tsx`          | Ayan          | PB-010, PB-011, PB-020, PB-022, PB-023 |
-| Custodian     | `server/src/custodian`     | `screens/Custodian.tsx`        | Andrew        | PB-012..PB-018, PB-024                 |
-| Completion    | `server/src/completion`    | `screens/Completion.tsx`       | Selina        | PB-019, PB-021, PB-025..PB-029         |
-| Notifications | `server/src/notifications` | `client/src/lib/push.ts`       | Ayan / Andrew | PB-023, PB-024                         |
+| Area          | Server module (NestJS)               | Client screen                  | Owner         | Backlog                                      |
+| ------------- | ------------------------------------ | ------------------------------ | ------------- | -------------------------------------------- |
+| Auth          | `server/src/auth`                    | `client/src/screens/Login.tsx` | Ann           | PB-001, PB-002                               |
+| Properties    | `server/src/properties`              | `screens/Properties.tsx`       | Amabe         | PB-003, PB-004                               |
+| Reporting     | `server/src/reporting`               | `screens/Reporting.tsx`        | Amabe / Ayan  | PB-005..PB-009                               |
+| Tickets       | `server/src/tickets`                 | `screens/Tickets.tsx`          | Ayan          | PB-010, PB-011, PB-020, PB-022, PB-023       |
+| Custodian     | `server/src/custodian`               | `screens/Custodian.tsx`        | Andrew        | PB-012..PB-018, PB-024                       |
+| Completion    | `server/src/completion`              | `screens/Completion.tsx`       | Selina        | PB-019, PB-020 (API), PB-021, PB-026..PB-029 |
+| Audit history | `server/src/common/audit.service.ts` | –                              | Ann           | PB-025                                       |
+| Notifications | `server/src/notifications`           | `client/src/lib/push.ts`       | Ayan / Andrew | PB-023, PB-024                               |
 
-Each module's controller has an `// OWNER:` tag and a TODO list of its backlog IDs. Tick an item off in the PR that finishes it.
+Backlog IDs and titles come from the team's ClickUp board; use them in branch names and PR titles. Each module's controller has an `// OWNER:` tag and a TODO list of its backlog IDs. Tick an item off in the PR that finishes it.
 
 Do your work inside your own module. If you need to change something shared, open a PR for that change on its own.
 

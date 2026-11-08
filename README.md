@@ -40,9 +40,9 @@ server/            NestJS API and BullMQ worker
   src/auth/          phone OTP, JWT, global guards               (Ann)
   src/properties/    blocks, rooms, occupancy                    (Amabe)
   src/reporting/     fault catalogue, reports, photos            (Amabe / Ayan)
-  src/tickets/       ticket list, detail, review, status         (Ayan)
-  src/custodian/     work queue, visits, repair proof            (Andrew)
-  src/completion/    confirm / dispute, rating                   (Selina)
+  src/tickets/       ticket list, detail, timeline               (Ayan)
+  src/custodian/     targets, work queue, review, visits         (Andrew)
+  src/completion/    proof of repair, verify, auto-close, stats  (Selina)
   src/notifications/ Web Push + SMS fallback                     (Ayan / Andrew)
   src/queue/ src/worker/  BullMQ queues and job processors
   src/storage/       S3 / MinIO client

@@ -1,14 +1,15 @@
 // OWNER: Andrew
 // TODO:
-//   [ ] PB-012  work queue
-//   [ ] PB-013  assignment
-//   [ ] PB-014  schedule a visit
-//   [ ] PB-015
-//   [ ] PB-016  mark a visit missed
-//   [ ] PB-017
-//   [ ] PB-018  repair proof (photos via StorageService, kind PROOF);
-//               on COMPLETED call TicketTimersService.scheduleAutoClose()
-//   [ ] PB-024  notify resident (Web Push, SMS fallback): NotificationsService.notify()
+//   [ ] PB-012  response targets by category; flag overdue tickets
+//   [ ] PB-013  prioritised work queue: urgency and least time remaining, search and filter
+//   [ ] PB-014  review and correct the ticket category (REPORTED -> REVIEWED);
+//               then TicketTimersService.scheduleResponseDeadline()
+//   [ ] PB-015  schedule a repair visit inside the resident's availability; notify the resident
+//   [ ] PB-016  resident requests another time for a scheduled visit
+//   [ ] PB-017  record a missed visit; the ticket stays open for rescheduling
+//   [ ] PB-018  mark work in progress
+//   [ ] PB-024  custodian alerts for new, breached and reopened tickets:
+//               NotificationsService.notify()
 import { Controller, Get, Post } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { notImplemented } from '../common/app-exception';
@@ -19,7 +20,12 @@ import { Roles } from '../common/decorators';
 export class CustodianController {
   @Get('queue')
   queue() {
-    notImplemented('PB-012');
+    notImplemented('PB-013');
+  }
+
+  @Post('tickets/:id/review')
+  review() {
+    notImplemented('PB-014');
   }
 
   @Post('tickets/:id/assign')
@@ -29,16 +35,11 @@ export class CustodianController {
 
   @Post('tickets/:id/visits')
   scheduleVisit() {
-    notImplemented('PB-014');
+    notImplemented('PB-015');
   }
 
   @Post('visits/:visitId/missed')
   markMissed() {
-    notImplemented('PB-016');
-  }
-
-  @Post('tickets/:id/repair-proof')
-  repairProof() {
-    notImplemented('PB-018');
+    notImplemented('PB-017');
   }
 }
