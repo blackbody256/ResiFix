@@ -40,9 +40,9 @@ server/            NestJS API and BullMQ worker
   src/auth/          phone OTP, JWT, global guards               (Ann)
   src/properties/    blocks, rooms, occupancy                    (Amabe)
   src/reporting/     fault catalogue, reports, photos            (Amabe / Ayan)
-  src/tickets/       ticket list, detail, review, status         (Ayan)
-  src/custodian/     work queue, visits, repair proof            (Andrew)
-  src/completion/    confirm / dispute, rating                   (Selina)
+  src/tickets/       ticket list, detail, timeline               (Ayan)
+  src/custodian/     targets, work queue, review, visits         (Andrew)
+  src/completion/    proof of repair, verify, auto-close, stats  (Selina)
   src/notifications/ Web Push + SMS fallback                     (Ayan / Andrew)
   src/queue/ src/worker/  BullMQ queues and job processors
   src/storage/       S3 / MinIO client
@@ -62,17 +62,25 @@ cp .env.example .env
 npm install                 # also generates the Prisma client
 npm run infra:up            # Postgres, Redis, MinIO in Docker
 npm run migrate             # apply migrations
-npm run seed                # demo hostel, blocks, rooms and users
+npm run seed                # two demo properties, users and tickets in every status
 npm run dev                 # API http://localhost:3000/api, app http://localhost:5173
 ```
 
 Sign in with a seeded phone number. In development the OTP is always **123456** and the API prints it to its log.
 
-| Role      | Phone                        |
-| --------- | ---------------------------- |
-| Resident  | 0700 000 010 to 0700 000 013 |
-| Custodian | 0700 000 001                 |
-| Admin     | 0700 000 002                 |
+| Role      | Kikoni Demo Hostel (Block A / B) | Mitchell Hall (demo) (Wing 1 / 2) |
+| --------- | -------------------------------- | --------------------------------- |
+| Resident  | 0700 000 010 to 0700 000 013     | 0700 000 110, 0700 000 111        |
+| Custodian | 0700 000 001, 0700 000 003       | 0700 000 101                      |
+| Admin     | 0700 000 002                     | 0700 000 102                      |
+
+The Kikoni hostel has a ticket at every stage of the lifecycle (an overdue urgent report, a missed visit, work in progress, a repair awaiting confirmation, a reopened one and a closed, rated one), with visits and status history. Times are relative to when you seeded, so re-run `npm run seed` to refresh them. The second property is there to check data isolation.
+
+### If Docker images will not pull
+
+- `pull access denied for minio/minio`: MinIO no longer publishes images. `docker-compose.yml` now uses `pgsty/minio`, a community build of the same server; pull the latest `main`.
+- `toomanyrequests: ... pull rate limit`: Docker Hub allows 100 anonymous pulls an hour per IP address, and campus Wi-Fi shares one address. Run `docker login` with a free Docker Hub account, or pull once on mobile data.
+- When one image fails, Compose cancels the others, so the error you see first may not be the real one. Pull one at a time to find it: `docker compose pull db`, then `redis`, then `minio`.
 
 ### Services and ports
 
@@ -104,12 +112,17 @@ Everything runs without these. Fill them in `.env` when you need them:
 | `npm run start:worker`            | Run the queue worker on its own (`RUN_WORKER_INLINE=false`) |
 | `npm run lint`                    | ESLint + Prettier check (`npm run format` fixes formatting) |
 | `npm run typecheck`               | TypeScript for server and client                            |
+| `npm test`                        | Server unit + e2e tests (needs `infra:up`; see below)       |
 | `npm run infra:up` / `infra:down` | Start / stop Postgres, Redis and MinIO                      |
 | `npm run stack:up`                | Build and run the whole stack in Docker behind Nginx        |
 | `npm run migrate`                 | Apply migrations; `-- --name <change>` creates a new one    |
 | `npm run seed`                    | Reset demo data                                             |
 | `npm run db:reset`                | Drop, re-migrate and re-seed                                |
 | `npm run studio`                  | Prisma Studio                                               |
+
+## Tests
+
+`npm test` runs the server tests with [Vitest](https://vitest.dev): unit tests next to the code (`server/src/**/*.spec.ts`) and HTTP tests against the real app (`server/test/**/*.e2e-spec.ts`). The e2e tests need `npm run infra:up`, and use their own database (`resifix_test`, created automatically), Redis DB 15 and photo bucket, so your demo data is never touched. CI runs them on every PR. How to write one: [server/test/README.md](server/test/README.md).
 
 ## API contract
 
