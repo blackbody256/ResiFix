@@ -62,6 +62,21 @@ jobs:
       - name: Seed
         run: npm run seed
 
+      # GitHub service containers cannot pass a command, which MinIO needs, so start it here.
+      # Same image as docker-compose.yml.
+      - name: Start MinIO (photo storage for the e2e tests)
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=resifix -e MINIO_ROOT_PASSWORD=resifix-secret \
+            pgsty/minio:RELEASE.2026-08-04T00-00-00Z server /data
+          for i in $(seq 1 30); do curl -fs localhost:9000/minio/health/ready && break; sleep 1; done
+          curl -fs localhost:9000/minio/health/ready
+
+      # Unit tests, then HTTP tests against the real app. The e2e tests use their own database
+      # (resifix_ci_test, created and migrated by test/global-setup.ts), Redis DB 15 and bucket.
+      - name: Tests (unit + e2e)
+        run: npm test
+
       - name: Build API (NestJS) and client (React PWA)
         run: npm run build
 
