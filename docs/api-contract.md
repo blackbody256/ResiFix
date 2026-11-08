@@ -74,21 +74,22 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 
 ### Stubs (return 501 until built)
 
-| Method | Path                                  | Role             | Backlog |
-| ------ | ------------------------------------- | ---------------- | ------- |
-| POST   | `/properties/blocks`                  | ADMIN            | PB-003  |
-| POST   | `/properties/blocks/:blockId/rooms`   | ADMIN            | PB-003  |
-| POST   | `/properties/occupancies`             | ADMIN            | PB-004  |
-| POST   | `/reporting/tickets`                  | RESIDENT         | PB-005  |
-| POST   | `/tickets/:id/review`                 | ADMIN            | PB-011  |
-| POST   | `/tickets/:id/status`                 | ADMIN, CUSTODIAN | PB-020  |
-| GET    | `/custodian/queue`                    | CUSTODIAN, ADMIN | PB-012  |
-| POST   | `/custodian/tickets/:id/assign`       | CUSTODIAN, ADMIN | PB-013  |
-| POST   | `/custodian/tickets/:id/visits`       | CUSTODIAN, ADMIN | PB-014  |
-| POST   | `/custodian/visits/:visitId/missed`   | CUSTODIAN, ADMIN | PB-016  |
-| POST   | `/custodian/tickets/:id/repair-proof` | CUSTODIAN, ADMIN | PB-018  |
-| POST   | `/completion/tickets/:id/verify`      | RESIDENT         | PB-019  |
-| POST   | `/completion/tickets/:id/rating`      | RESIDENT         | PB-025  |
+| Method | Path                                   | Role             | Backlog        |
+| ------ | -------------------------------------- | ---------------- | -------------- |
+| POST   | `/properties/blocks`                   | ADMIN            | PB-003         |
+| POST   | `/properties/blocks/:blockId/rooms`    | ADMIN            | PB-003         |
+| POST   | `/properties/occupancies`              | ADMIN            | PB-004         |
+| POST   | `/reporting/tickets`                   | RESIDENT         | PB-005, PB-006 |
+| GET    | `/custodian/queue`                     | CUSTODIAN, ADMIN | PB-013         |
+| POST   | `/custodian/tickets/:id/review`        | CUSTODIAN, ADMIN | PB-014         |
+| POST   | `/custodian/tickets/:id/assign`        | CUSTODIAN, ADMIN | PB-013         |
+| POST   | `/custodian/tickets/:id/visits`        | CUSTODIAN, ADMIN | PB-015         |
+| POST   | `/custodian/visits/:visitId/missed`    | CUSTODIAN, ADMIN | PB-017         |
+| POST   | `/completion/tickets/:id/repair-proof` | CUSTODIAN, ADMIN | PB-019         |
+| POST   | `/completion/tickets/:id/verify`       | RESIDENT         | PB-020         |
+| POST   | `/completion/tickets/:id/rating`       | RESIDENT         | PB-022         |
+
+Backlog IDs and titles match the ClickUp board. Stories with no stub yet (PB-012, PB-016, PB-018, PB-024 and others) add their endpoints to this file in the PR that builds them.
 
 ### `GET /tickets/:id` (PB-010)
 
