@@ -120,6 +120,13 @@ describe('PB-012 response targets', () => {
 
       const dueAt = await targets.startClock(ticket.id);
       expect(dueAt).toEqual(new Date(reopenedAt.getTime() + 24 * HOUR));
+
+      // Still counted from the reopen once the ticket has moved on from REOPENED.
+      await t.prisma.ticket.update({
+        where: { id: ticket.id },
+        data: { status: TicketStatus.REVIEWED },
+      });
+      expect(await targets.startClock(ticket.id)).toEqual(dueAt);
     });
 
     it('clears dueAt and cancels the alert when no target applies', async () => {

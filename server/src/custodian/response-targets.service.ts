@@ -43,7 +43,7 @@ export class ResponseTargetsService {
     });
   }
 
-  /** When each of these tickets was last reopened, from the audit log. */
+  /** When each of these tickets was last reopened, from the audit log (absent if never). */
   async reopenedAt(ticketIds: string[]): Promise<Map<string, Date>> {
     if (!ticketIds.length) return new Map();
     const rows = await this.prisma.auditLog.groupBy({
@@ -75,10 +75,8 @@ export class ResponseTargetsService {
       ticket.priority,
     );
 
-    const clockStart =
-      ticket.status === TicketStatus.REOPENED
-        ? ((await this.reopenedAt([ticket.id])).get(ticket.id) ?? new Date())
-        : ticket.createdAt;
+    // A reopened ticket keeps the restarted clock through review, scheduling and repair.
+    const clockStart = (await this.reopenedAt([ticket.id])).get(ticket.id) ?? ticket.createdAt;
     const dueAt = rule ? respondBy(rule, clockStart) : null;
 
     await this.prisma.ticket.update({ where: { id: ticket.id }, data: { dueAt } });
