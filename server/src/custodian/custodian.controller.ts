@@ -11,17 +11,28 @@
 //   [ ] PB-018  mark work in progress
 //   [ ] PB-024  custodian alerts for new, breached and reopened tickets:
 //               NotificationsService.notify()
-import { Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { Role } from '@prisma/client';
+import { z } from 'zod';
+import type { AuthUser } from '../auth/auth-user';
 import { notImplemented } from '../common/app-exception';
-import { Roles, Scope } from '../common/decorators';
+import { CurrentUser, Roles, Scope } from '../common/decorators';
+import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import type { PropertyScope } from '../common/property-scope';
 import { ResponseTargetsService } from './response-targets.service';
+import { TicketActionsService } from './ticket-actions.service';
+import { QueueQuery, WorkQueueService } from './work-queue.service';
+
+const AssignBody = z.object({ assigneeId: z.string().min(1) });
 
 @Controller('custodian')
 @Roles(Role.CUSTODIAN, Role.ADMIN)
 export class CustodianController {
-  constructor(private readonly targets: ResponseTargetsService) {}
+  constructor(
+    private readonly targets: ResponseTargetsService,
+    private readonly workQueue: WorkQueueService,
+    private readonly actions: TicketActionsService,
+  ) {}
 
   /** PB-012: the response targets in force for the caller's property. GET /api/custodian/targets */
   @Get('targets')
@@ -29,9 +40,17 @@ export class CustodianController {
     return { targets: await this.targets.list(scope) };
   }
 
+  /**
+   * PB-013: open tickets, most pressing first. GET /api/custodian/queue
+   * ?status=&priority=&state=&categoryId=&blockId=&assignee=me|unassigned|<id>&q=&limit=
+   */
   @Get('queue')
-  queue() {
-    notImplemented('PB-013');
+  queue(
+    @Query(new ZodValidationPipe(QueueQuery)) query: QueueQuery,
+    @CurrentUser() user: AuthUser,
+    @Scope() scope: PropertyScope,
+  ) {
+    return this.workQueue.queue(user, scope, query);
   }
 
   @Post('tickets/:id/review')
@@ -39,9 +58,16 @@ export class CustodianController {
     notImplemented('PB-014');
   }
 
+  /** PB-013: give a ticket to a custodian. POST /api/custodian/tickets/:id/assign { assigneeId } */
   @Post('tickets/:id/assign')
-  assign() {
-    notImplemented('PB-013');
+  @HttpCode(200)
+  async assign(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(AssignBody)) body: z.infer<typeof AssignBody>,
+    @CurrentUser() user: AuthUser,
+    @Scope() scope: PropertyScope,
+  ) {
+    return { ticket: await this.actions.assign(id, body.assigneeId, user, scope) };
   }
 
   @Post('tickets/:id/visits')

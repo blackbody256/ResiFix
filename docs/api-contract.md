@@ -68,6 +68,8 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | GET    | `/tickets`                          | any              | –                                                | `{ tickets }`. Residents see only their own tickets.                                 |
 | GET    | `/tickets/:id`                      | any              | –                                                | `{ ticket }` with photos, visits, proof, `timeline` (PB-010)                         |
 | GET    | `/custodian/targets`                | CUSTODIAN, ADMIN | –                                                | `{ targets: [{ id, priority, category, respondWithinH, resolveWithinH }] }` (PB-012) |
+| GET    | `/custodian/queue`                  | CUSTODIAN, ADMIN | query, see below                                 | `{ tickets: QueueItem[], summary }` (PB-013)                                         |
+| POST   | `/custodian/tickets/:id/assign`     | CUSTODIAN, ADMIN | `{ assigneeId }`                                 | `{ ticket: QueueItem }` (PB-013)                                                     |
 | GET    | `/notifications`                    | any              | –                                                | `{ notifications }`: caller's latest 50                                              |
 | GET    | `/notifications/push/public-key`    | public           | –                                                | `{ publicKey }` (null when Web Push is not configured)                               |
 | POST   | `/notifications/push/subscriptions` | any              | `PushSubscription.toJSON()`                      | `{ subscribed: true }`                                                               |
@@ -81,9 +83,7 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | POST   | `/properties/blocks/:blockId/rooms`    | ADMIN            | PB-003         |
 | POST   | `/properties/occupancies`              | ADMIN            | PB-004         |
 | POST   | `/reporting/tickets`                   | RESIDENT         | PB-005, PB-006 |
-| GET    | `/custodian/queue`                     | CUSTODIAN, ADMIN | PB-013         |
 | POST   | `/custodian/tickets/:id/review`        | CUSTODIAN, ADMIN | PB-014         |
-| POST   | `/custodian/tickets/:id/assign`        | CUSTODIAN, ADMIN | PB-013         |
 | POST   | `/custodian/tickets/:id/visits`        | CUSTODIAN, ADMIN | PB-015         |
 | POST   | `/custodian/visits/:visitId/missed`    | CUSTODIAN, ADMIN | PB-017         |
 | POST   | `/completion/tickets/:id/repair-proof` | CUSTODIAN, ADMIN | PB-019         |
@@ -102,6 +102,39 @@ Each `ResponseTarget` gives a priority (optionally one category) two windows, bo
 | `RESOLVE` | `ASSIGNED`, `SCHEDULED`, `IN_PROGRESS` | the repair is `COMPLETED`                   | `resolveWithinH` |
 
 A category's own target wins over the property-wide one for the same priority. `Ticket.dueAt` holds the respond-by time; `ResponseTargetsService.startClock(ticketId)` sets it and schedules the `response-deadline` alert, and must be called after a ticket is reported (PB-005), reviewed or reclassified (PB-014) and reopened (PB-020). A ticket is `DUE_SOON` in the last quarter of its window and `OVERDUE` after it.
+
+### Work queue (PB-013)
+
+`GET /custodian/queue` returns the caller property's open tickets (`REPORTED`, `REVIEWED`, `REOPENED`, `ASSIGNED`, `SCHEDULED`, `IN_PROGRESS`), most pressing first: earliest target deadline (so overdue tickets lead), then priority, then oldest report.
+
+| Query        | Example                     | Meaning                                                                   |
+| ------------ | --------------------------- | ------------------------------------------------------------------------- |
+| `status`     | `SCHEDULED,IN_PROGRESS`     | Any of the open statuses, or `COMPLETED` (waiting for the resident)       |
+| `priority`   | `URGENT,HIGH`               |                                                                           |
+| `state`      | `OVERDUE` or `DUE_SOON`     | Against the response target                                               |
+| `assignee`   | `me`, `unassigned`, user id |                                                                           |
+| `categoryId` | id                          |                                                                           |
+| `blockId`    | id                          |                                                                           |
+| `q`          | `flush`, `102`              | Case-insensitive match on description, room, block, fault, category or id |
+| `limit`      | `50`                        | 1 to 200, default 100. `summary` still counts every match.                |
+
+A `QueueItem` names the room, never the resident:
+
+```
+{ id, status, priority, description, createdAt, reopenCount,
+  room: { id, number, block: { id, name } },
+  faultItem: { id, name, category: { id, name } },
+  assignee: { id, name } | null,
+  photoCount,                                    // the resident's report photos
+  nextVisit: { id, scheduledAt, custodian: { id, name } } | null,
+  lastMissedVisit: { id, scheduledAt } | null,   // when the latest visit was missed
+  target: { clock, dueAt, respondBy, resolveBy, state, minutesLeft } | null,
+  next: 'REVIEW' | 'SCHEDULE' | 'VISIT' | 'RESCHEDULE' | 'COMPLETE' | 'AWAIT_RESIDENT' }
+```
+
+`summary` is `{ total, overdue, dueSoon, unassigned }`.
+
+`POST /custodian/tickets/:id/assign { assigneeId }` gives the ticket to an active custodian of the property. `REVIEWED` and `REOPENED` tickets become `ASSIGNED`; assigned, scheduled and in-progress tickets keep their status and their upcoming visits move to the new custodian. A `REPORTED` ticket must be reviewed first (409), and finished tickets cannot be assigned (409). The new assignee is notified unless they assigned it to themselves. Audit action: `ticket.assigned`, `meta: { assigneeId, previousAssigneeId }`.
 
 ### `GET /tickets/:id` (PB-010)
 
