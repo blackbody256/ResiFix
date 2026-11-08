@@ -55,21 +55,22 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 
 ### Implemented
 
-| Method | Path                                | Auth     | Request                                          | Response                                                 |
-| ------ | ----------------------------------- | -------- | ------------------------------------------------ | -------------------------------------------------------- |
-| GET    | `/health`                           | public   | –                                                | `{ status, db, redis, time }` (503 if DB down)           |
-| POST   | `/auth/request-otp`                 | public   | `{ phone }`                                      | `{ phone, expiresInSeconds }`                            |
-| POST   | `/auth/verify-otp`                  | public   | `{ phone, code }`                                | `{ token, user: { id, propertyId, phone, name, role } }` |
-| GET    | `/auth/me`                          | any      | –                                                | `{ user }`                                               |
-| GET    | `/properties/mine`                  | any      | –                                                | `{ property: { ..., blocks: [{ ..., rooms }] } }`        |
-| GET    | `/reporting/fault-categories`       | any      | –                                                | `{ categories: [{ ..., items }] }`                       |
-| POST   | `/reporting/tickets/:id/photos`     | RESIDENT | multipart, field `photo` (JPEG/PNG/WebP, ≤ 5 MB) | `{ photo: { id, kind, createdAt } }`                     |
-| GET    | `/reporting/photos/:photoId/link`   | any      | –                                                | `{ url, expiresAt }`: presigned GET link (PB-007)        |
-| GET    | `/tickets`                          | any      | –                                                | `{ tickets }`. Residents see only their own tickets.     |
-| GET    | `/notifications`                    | any      | –                                                | `{ notifications }`: caller's latest 50                  |
-| GET    | `/notifications/push/public-key`    | public   | –                                                | `{ publicKey }` (null when Web Push is not configured)   |
-| POST   | `/notifications/push/subscriptions` | any      | `PushSubscription.toJSON()`                      | `{ subscribed: true }`                                   |
-| DELETE | `/notifications/push/subscriptions` | any      | `{ endpoint }`                                   | `{ subscribed: false }`                                  |
+| Method | Path                                | Auth     | Request                                          | Response                                                     |
+| ------ | ----------------------------------- | -------- | ------------------------------------------------ | ------------------------------------------------------------ |
+| GET    | `/health`                           | public   | –                                                | `{ status, db, redis, time }` (503 if DB down)               |
+| POST   | `/auth/request-otp`                 | public   | `{ phone }`                                      | `{ phone, expiresInSeconds }`                                |
+| POST   | `/auth/verify-otp`                  | public   | `{ phone, code }`                                | `{ token, user: { id, propertyId, phone, name, role } }`     |
+| GET    | `/auth/me`                          | any      | –                                                | `{ user }`                                                   |
+| GET    | `/properties/mine`                  | any      | –                                                | `{ property: { ..., blocks: [{ ..., rooms }] } }`            |
+| GET    | `/reporting/fault-categories`       | any      | –                                                | `{ categories: [{ ..., items }] }`                           |
+| POST   | `/reporting/tickets/:id/photos`     | RESIDENT | multipart, field `photo` (JPEG/PNG/WebP, ≤ 5 MB) | `{ photo: { id, kind, createdAt } }`                         |
+| GET    | `/reporting/photos/:photoId/link`   | any      | –                                                | `{ url, expiresAt }`: presigned GET link (PB-007)            |
+| GET    | `/tickets`                          | any      | –                                                | `{ tickets }`. Residents see only their own tickets.         |
+| GET    | `/tickets/:id`                      | any      | –                                                | `{ ticket }` with photos, visits, proof, `timeline` (PB-010) |
+| GET    | `/notifications`                    | any      | –                                                | `{ notifications }`: caller's latest 50                      |
+| GET    | `/notifications/push/public-key`    | public   | –                                                | `{ publicKey }` (null when Web Push is not configured)       |
+| POST   | `/notifications/push/subscriptions` | any      | `PushSubscription.toJSON()`                      | `{ subscribed: true }`                                       |
+| DELETE | `/notifications/push/subscriptions` | any      | `{ endpoint }`                                   | `{ subscribed: false }`                                      |
 
 ### Stubs (return 501 until built)
 
@@ -79,7 +80,6 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | POST   | `/properties/blocks/:blockId/rooms`   | ADMIN            | PB-003  |
 | POST   | `/properties/occupancies`             | ADMIN            | PB-004  |
 | POST   | `/reporting/tickets`                  | RESIDENT         | PB-005  |
-| GET    | `/tickets/:id`                        | any              | PB-010  |
 | POST   | `/tickets/:id/review`                 | ADMIN            | PB-011  |
 | POST   | `/tickets/:id/status`                 | ADMIN, CUSTODIAN | PB-020  |
 | GET    | `/custodian/queue`                    | CUSTODIAN, ADMIN | PB-012  |
@@ -89,5 +89,14 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | POST   | `/custodian/tickets/:id/repair-proof` | CUSTODIAN, ADMIN | PB-018  |
 | POST   | `/completion/tickets/:id/verify`      | RESIDENT         | PB-019  |
 | POST   | `/completion/tickets/:id/rating`      | RESIDENT         | PB-025  |
+
+### `GET /tickets/:id` (PB-010)
+
+Same visibility as the list: residents get **404** for tickets they did not report; staff see any ticket in their property. The `ticket` object has the ticket's own fields plus:
+
+- `room` (with `block`), `faultItem` (with `category`), `reporter { id, name, phone }`, `assignee { id, name, role } | null`
+- `photos`: the resident's report photos, `[{ id, kind, url, urlExpiresAt, createdAt }]`. `url` is a presigned link; fetch the ticket again after `urlExpiresAt`.
+- `visits` (with `custodian`), `repairProofs` (with `submittedBy` and their own `photos`), `verifications` (with `user`), `rating`
+- `timeline`: the ticket's audit log, oldest first, `[{ id, action, fromStatus, toStatus, actor, meta, createdAt }]`
 
 The stub paths are a starting point. Owners can rename or reshape them, but must update this table in the same PR.
