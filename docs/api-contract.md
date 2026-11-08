@@ -55,31 +55,33 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 
 ### Implemented
 
-| Method | Path                                | Auth             | Request                                          | Response                                                                             |
-| ------ | ----------------------------------- | ---------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| GET    | `/health`                           | public           | –                                                | `{ status, db, redis, time }` (503 if DB down)                                       |
-| POST   | `/auth/request-otp`                 | public           | `{ phone }`                                      | `{ phone, expiresInSeconds }`                                                        |
-| POST   | `/auth/verify-otp`                  | public           | `{ phone, code }`                                | `{ token, user: { id, propertyId, phone, name, role } }`                             |
-| GET    | `/auth/me`                          | any              | –                                                | `{ user }`                                                                           |
-| GET    | `/properties/mine`                  | any              | –                                                | `{ property: { ..., blocks: [{ ..., rooms }] } }`                                    |
-| GET    | `/reporting/fault-categories`       | any              | –                                                | `{ categories: [{ ..., items }] }`                                                   |
-| POST   | `/reporting/tickets/:id/photos`     | RESIDENT         | multipart, field `photo` (JPEG/PNG/WebP, ≤ 5 MB) | `{ photo: { id, kind, createdAt } }`                                                 |
-| GET    | `/reporting/photos/:photoId/link`   | any              | –                                                | `{ url, expiresAt }`: presigned link; residents: own tickets                         |
-| GET    | `/tickets`                          | any              | –                                                | `{ tickets }`. Residents see only their own tickets.                                 |
-| GET    | `/tickets/:id`                      | any              | –                                                | `{ ticket }` with photos, visits, proof, `timeline` (PB-010)                         |
-| GET    | `/custodian/targets`                | CUSTODIAN, ADMIN | –                                                | `{ targets: [{ id, priority, category, respondWithinH, resolveWithinH }] }` (PB-012) |
-| GET    | `/custodian/queue`                  | CUSTODIAN, ADMIN | query, see below                                 | `{ tickets: QueueItem[], summary }` (PB-013)                                         |
-| POST   | `/custodian/tickets/:id/assign`     | CUSTODIAN, ADMIN | `{ assigneeId }`                                 | `{ ticket: QueueItem }` (PB-013)                                                     |
-| POST   | `/custodian/tickets/:id/review`     | CUSTODIAN, ADMIN | `{ faultItemId?, priority?, note? }`             | `{ ticket: QueueItem }` (PB-014)                                                     |
-| POST   | `/custodian/tickets/:id/visits`     | CUSTODIAN, ADMIN | `{ scheduledAt, custodianId?, notes? }`          | 201 `{ visit, ticket: QueueItem }` (PB-015)                                          |
-| PATCH  | `/custodian/visits/:visitId`        | CUSTODIAN, ADMIN | `{ scheduledAt, notes? }`                        | `{ visit, ticket: QueueItem }` (PB-016)                                              |
-| POST   | `/visits/:visitId/change-request`   | RESIDENT         | `{ message }`                                    | 201 `{ changeRequest: { visitId, message, requestedAt } }` (PB-016)                  |
-| POST   | `/custodian/visits/:visitId/missed` | CUSTODIAN, ADMIN | `{ reason, notes? }`                             | `{ visit, ticket: QueueItem }` (PB-017)                                              |
-| POST   | `/custodian/tickets/:id/start`      | CUSTODIAN, ADMIN | `{ visitId? }` (body optional)                   | `{ visit, ticket: QueueItem }` (PB-018)                                              |
-| GET    | `/notifications`                    | any              | –                                                | `{ notifications }`: caller's latest 50                                              |
-| GET    | `/notifications/push/public-key`    | public           | –                                                | `{ publicKey }` (null when Web Push is not configured)                               |
-| POST   | `/notifications/push/subscriptions` | any              | `PushSubscription.toJSON()`                      | `{ subscribed: true }`                                                               |
-| DELETE | `/notifications/push/subscriptions` | any              | `{ endpoint }`                                   | `{ subscribed: false }`                                                              |
+| Method | Path                                | Auth             | Request                                          | Response                                                                                         |
+| ------ | ----------------------------------- | ---------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| GET    | `/health`                           | public           | –                                                | `{ status, db, redis, time }` (503 if DB down)                                                   |
+| POST   | `/auth/request-otp`                 | public           | `{ phone }`                                      | `{ phone, expiresInSeconds }`                                                                    |
+| POST   | `/auth/verify-otp`                  | public           | `{ phone, code }`                                | `{ token, user: { id, propertyId, phone, name, role } }`                                         |
+| GET    | `/auth/me`                          | any              | –                                                | `{ user }`                                                                                       |
+| GET    | `/properties/mine`                  | any              | –                                                | `{ property: { ..., blocks: [{ ..., rooms }] } }`                                                |
+| GET    | `/reporting/fault-categories`       | any              | –                                                | `{ categories: [{ ..., items }] }`                                                               |
+| POST   | `/reporting/tickets/:id/photos`     | RESIDENT         | multipart, field `photo` (JPEG/PNG/WebP, ≤ 5 MB) | `{ photo: { id, kind, createdAt } }`                                                             |
+| GET    | `/reporting/photos/:photoId/link`   | any              | –                                                | `{ url, expiresAt }`: presigned link; residents: own tickets                                     |
+| GET    | `/tickets`                          | any              | –                                                | `{ tickets }`. Residents see only their own tickets.                                             |
+| GET    | `/tickets/:id`                      | any              | –                                                | `{ ticket }` with photos, visits, proof, `timeline` (PB-010)                                     |
+| GET    | `/custodian/targets`                | CUSTODIAN, ADMIN | –                                                | `{ targets: [{ id, priority, category, respondWithinH, resolveWithinH }] }` (PB-012)             |
+| GET    | `/custodian/queue`                  | CUSTODIAN, ADMIN | query, see below                                 | `{ tickets: QueueItem[], summary }` (PB-013)                                                     |
+| POST   | `/custodian/tickets/:id/assign`     | CUSTODIAN, ADMIN | `{ assigneeId }`                                 | `{ ticket: QueueItem }` (PB-013)                                                                 |
+| POST   | `/custodian/tickets/:id/review`     | CUSTODIAN, ADMIN | `{ faultItemId?, priority?, note? }`             | `{ ticket: QueueItem }` (PB-014)                                                                 |
+| POST   | `/custodian/tickets/:id/visits`     | CUSTODIAN, ADMIN | `{ scheduledAt, custodianId?, notes? }`          | 201 `{ visit, ticket: QueueItem }` (PB-015)                                                      |
+| PATCH  | `/custodian/visits/:visitId`        | CUSTODIAN, ADMIN | `{ scheduledAt, notes? }`                        | `{ visit, ticket: QueueItem }` (PB-016)                                                          |
+| POST   | `/visits/:visitId/change-request`   | RESIDENT         | `{ message }`                                    | 201 `{ changeRequest: { visitId, message, requestedAt } }` (PB-016)                              |
+| POST   | `/custodian/visits/:visitId/missed` | CUSTODIAN, ADMIN | `{ reason, notes? }`                             | `{ visit, ticket: QueueItem }` (PB-017)                                                          |
+| POST   | `/custodian/tickets/:id/start`      | CUSTODIAN, ADMIN | `{ visitId? }` (body optional)                   | `{ visit, ticket: QueueItem }` (PB-018)                                                          |
+| GET    | `/notifications`                    | any              | –                                                | `{ notifications, unread }`: caller's latest 50, plus the total unread count (PB-023)            |
+| POST   | `/notifications/:id/read`           | any              | –                                                | `{ notification }`: marks it read (first read time kept); 404 unless it is the caller's (PB-023) |
+| POST   | `/notifications/read-all`           | any              | –                                                | `{ updated }`: marks all the caller's unread notifications read (PB-023)                         |
+| GET    | `/notifications/push/public-key`    | public           | –                                                | `{ publicKey }` (null when Web Push is not configured)                                           |
+| POST   | `/notifications/push/subscriptions` | any              | `PushSubscription.toJSON()`                      | `{ subscribed: true }`                                                                           |
+| DELETE | `/notifications/push/subscriptions` | any              | `{ endpoint }`                                   | `{ subscribed: false }`                                                                          |
 
 ### Stubs (return 501 until built)
 
@@ -200,6 +202,18 @@ A request is open while it is the latest `visit.*` audit event for its visit, so
 | `ticketReopened(ticketId)` | PB-020, right after a resident reopens a ticket           | the assignee (or every custodian if none), and the admins |
 
 PB-005 and PB-020 should also call `ResponseTargetsService.startClock(ticketId)` (exported by `CustodianModule`), which sets `dueAt` and schedules the breach alert.
+
+### Resident updates (PB-023)
+
+`ResidentUpdatesService` (exported by `NotificationsModule`) tells the resident who reported a ticket about updates no other story already sends. Like every notification it goes in-app, then Web Push, then SMS. Nothing is sent when the reporter's account is inactive.
+
+| Call                        | Who calls it                                                      | Message                                                           |
+| --------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `ticketReviewed(ticketId)`  | PB-014, after a first review (`REPORTED`/`REOPENED` → `REVIEWED`) | "Report reviewed": a repair is being arranged                     |
+| `ticketAssigned(ticketId)`  | PB-013, after a custodian is assigned or the job changes hands    | "Custodian assigned": names the custodian                         |
+| `repairCompleted(ticketId)` | PB-019, after proof of repair (`IN_PROGRESS` → `COMPLETED`)       | "Repair finished": confirm or dispute within the auto-close hours |
+
+Already sent to the resident elsewhere, so not repeated: visit booked, moved or missed, and repair started (custodian `VisitsService`), and the 48-hour auto-close (worker, PB-021).
 
 ### `GET /tickets/:id` (PB-010)
 
