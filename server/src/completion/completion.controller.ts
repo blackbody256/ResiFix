@@ -11,17 +11,31 @@
 //   [ ] PB-028  missed visits and ratings analytics
 //   [ ] PB-029  manage categories and response targets
 // The rating endpoint below is PB-022 (Ayan).
-import { Controller, Post } from '@nestjs/common';
+import { Controller, Param, Post, UploadedFile, UseInterceptors, Body } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
 import { notImplemented } from '../common/app-exception';
-import { Roles } from '../common/decorators';
+import { CurrentUser, Roles, Scope } from '../common/decorators';
+import type { PropertyScope } from '../common/property-scope';
+import type { AuthUser } from '../auth/auth-user';
+import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { CompletionService, RepairProofBody } from './completion.service';
 
 @Controller('completion')
 export class CompletionController {
+  constructor(private readonly completion: CompletionService) {}
+
   @Post('tickets/:id/repair-proof')
   @Roles(Role.CUSTODIAN, Role.ADMIN)
-  repairProof() {
-    notImplemented('PB-019');
+  @UseInterceptors(FileInterceptor('photo', { limits: { fileSize: 5 * 1024 * 1024, files: 1 } }))
+  repairProof(
+    @Param('id') ticketId: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body(new ZodValidationPipe(RepairProofBody)) body: RepairProofBody,
+    @CurrentUser() user: AuthUser,
+    @Scope() scope: PropertyScope,
+  ) {
+    return this.completion.repairProof(ticketId, file, body, user, scope);
   }
 
   @Post('tickets/:id/verify')
