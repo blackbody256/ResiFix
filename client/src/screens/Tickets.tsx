@@ -49,7 +49,8 @@ interface TicketDetail extends TicketSummary {
     submittedBy: Person;
     photos: Photo[];
   }[];
-  rating: { score: number; comment: string | null } | null;
+  /** Only sent to the resident who reported the ticket; staff see rating totals only. */
+  rating?: { score: number; comment: string | null } | null;
   timeline: {
     id: string;
     action: string;

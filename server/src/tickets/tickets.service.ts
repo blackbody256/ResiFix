@@ -1,6 +1,6 @@
 // Ticket reads and lifecycle. OWNER: Ayan (PB-010, PB-011, PB-020, PB-022, PB-023).
 import { Injectable } from '@nestjs/common';
-import { type Prisma, Role } from '@prisma/client';
+import { PhotoKind, type Prisma, Role } from '@prisma/client';
 import type { AuthUser } from '../auth/auth-user';
 import { notFound } from '../common/app-exception';
 import type { PropertyScope } from '../common/property-scope';
@@ -15,7 +15,7 @@ const DETAIL_INCLUDE = {
   faultItem: { include: { category: true } },
   reporter: { select: { id: true, name: true, phone: true } },
   assignee: PERSON,
-  photos: { ...PHOTO, where: { repairProofId: null }, orderBy: { createdAt: 'asc' } },
+  photos: { ...PHOTO, where: { kind: PhotoKind.REPORT }, orderBy: { createdAt: 'asc' } },
   visits: {
     orderBy: { scheduledAt: 'asc' },
     include: { custodian: PERSON },
@@ -52,7 +52,11 @@ export class TicketsService {
     });
   }
 
-  /** PB-010: one ticket with its photos, visits, repair proof and audit timeline. */
+  /**
+   * PB-010: one ticket with its photos, visits, repair proof and audit timeline (PB-011).
+   * Timeline entries copy named audit fields only, so `meta` and any audit column added
+   * later never reach a resident by accident.
+   */
   async detail(id: string, user: AuthUser, scope: PropertyScope) {
     const ticket = await this.prisma.ticket.findFirst({
       where: scope.where<Prisma.TicketWhereInput>({ id, ...this.visibleTo(user) }),
@@ -61,9 +65,12 @@ export class TicketsService {
     // 404 (not 403) for other residents' and other properties' tickets: don't leak existence.
     if (!ticket) throw notFound('Ticket not found');
 
-    const { auditLogs, photos, repairProofs, ...rest } = ticket;
+    const { auditLogs, photos, repairProofs, rating, ...rest } = ticket;
     return {
       ...rest,
+      // Deliverable 4: managers only see rating totals (analytics), never one resident's
+      // score, so only the resident who reported the ticket gets its rating back.
+      ...(user.role === Role.RESIDENT && { rating }),
       photos: await this.withLinks(photos),
       repairProofs: await Promise.all(
         repairProofs.map(async (p) => ({ ...p, photos: await this.withLinks(p.photos) })),
@@ -74,7 +81,6 @@ export class TicketsService {
         fromStatus: log.fromStatus,
         toStatus: log.toStatus,
         actor: log.actor,
-        meta: log.meta,
         createdAt: log.createdAt,
       })),
     };

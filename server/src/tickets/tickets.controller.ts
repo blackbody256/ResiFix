@@ -5,6 +5,7 @@
 //   [ ] PB-020  UI for resident verification (API: Selina, POST /completion/tickets/:id/verify)
 //   [ ] PB-022  rate the service (endpoint stub: POST /completion/tickets/:id/rating)
 //   [ ] PB-023  student notifications on ticket updates: NotificationsService.notify()
+//               inbox + ResidentUpdatesService done; PB-013/PB-014/PB-019 still to call it
 // Status changes happen in the endpoint of the story that makes them (review, schedule, proof,
 // verify), each with assertTransition() + AuditService.record() in one $transaction.
 import { Controller, Get, Param } from '@nestjs/common';
