@@ -15,6 +15,7 @@ import { Link } from 'react-router';
 import { Button, Card, ErrorText, Textarea } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { MAX_PHOTOS, PHOTO_ACCEPT, preparePhoto } from '../lib/photos';
+import { rememberRoom, useMyRoom } from '../lib/myRoom';
 import { useApi } from '../lib/useApi';
 import { Loading } from './FeaturePlaceholder';
 
@@ -29,9 +30,9 @@ interface CategoriesResponse {
   categories: { id: string; name: string; items: FaultItem[] }[];
 }
 /**
- * Proposed PB-005 contract (to agree with Amabe):
- *   POST /reporting/tickets { faultItemId, description? } -> 201 { ticket: { id, reference, status } }
- * The room comes from the resident's current occupancy on the server, never from the client.
+ * PB-005 API (Amabe): POST /reporting/tickets { roomId, faultItemId, description? } -> { ticket }.
+ * The server rejects a room the resident does not currently live in (404). `reference` is not
+ * returned yet; the confirmation shows it once it is.
  */
 interface CreateTicketResponse {
   ticket: { id: string; reference?: string; status: string };
@@ -86,6 +87,7 @@ function ReportForm({
   categories: CategoriesResponse['categories'];
   onDone: (result: Result) => void;
 }) {
+  const myRoom = useMyRoom();
   const [categoryId, setCategoryId] = useState(categories[0].id);
   const [faultItemId, setFaultItemId] = useState('');
   const [description, setDescription] = useState('');
@@ -135,6 +137,10 @@ function ReportForm({
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (!myRoom.roomId) {
+      setError('Choose your room.');
+      return;
+    }
     if (!faultItemId) {
       setError('Choose what is broken.');
       return;
@@ -147,9 +153,11 @@ function ReportForm({
     try {
       const trimmed = description.trim();
       const { ticket } = await api.post<CreateTicketResponse>('/reporting/tickets', {
+        roomId: myRoom.roomId,
         faultItemId,
         ...(trimmed && { description: trimmed }),
       });
+      rememberRoom(myRoom.roomId);
       ticketId = ticket.id;
       reference = ticket.reference;
     } catch (err) {
@@ -175,6 +183,32 @@ function ReportForm({
 
   return (
     <form onSubmit={submit} noValidate className="space-y-5">
+      <div>
+        <label htmlFor="room" className="mb-2 block text-sm font-semibold">
+          Your room
+        </label>
+        <select
+          id="room"
+          value={myRoom.roomId}
+          onChange={(e) => myRoom.setRoomId(e.target.value)}
+          disabled={myRoom.loading}
+          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-3 text-base dark:border-slate-700 dark:bg-slate-950"
+        >
+          <option value="">{myRoom.loading ? 'Loading rooms…' : 'Choose your room'}</option>
+          {[...new Set(myRoom.rooms.map((r) => r.block))].map((block) => (
+            <optgroup key={block} label={block}>
+              {myRoom.rooms
+                .filter((r) => r.block === block)
+                .map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.label}
+                  </option>
+                ))}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+
       <fieldset>
         <legend className="mb-2 text-sm font-semibold">Type of fault</legend>
         <div className="flex flex-wrap gap-2">
