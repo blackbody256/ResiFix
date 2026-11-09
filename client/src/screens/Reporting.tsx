@@ -307,9 +307,93 @@ function ReportFlow({
     </Notice>
   );
 
+  /** Laptop: the step on the left, a sticky "Your report" panel on the right. */
+  const frame = (content: ReactNode) => (
+    <div className="lg:grid lg:grid-cols-3 lg:items-start lg:gap-6">
+      <div className="lg:col-span-2">{content}</div>
+      <aside className="hidden space-y-4 lg:sticky lg:top-24 lg:block">
+        <Card className="space-y-4">
+          <h2 className="text-lg font-bold">Your report</h2>
+          <ol className="space-y-2 text-sm">
+            {['Location & category', 'Details & photos', 'Availability & review'].map(
+              (label, i) => (
+                <li key={label} className="flex items-center gap-2">
+                  <span
+                    className={cx(
+                      'grid h-6 w-6 place-items-center rounded-full text-xs font-bold',
+                      i + 1 < step && 'bg-primary text-on-primary',
+                      i + 1 === step && 'bg-primary-container text-primary ring-2 ring-primary',
+                      i + 1 > step && 'bg-surface-variant text-outline',
+                    )}
+                  >
+                    {i + 1 < step ? <CheckIcon size={12} /> : i + 1}
+                  </span>
+                  <span className={cx(i + 1 === step ? 'font-bold' : 'text-on-surface-variant')}>
+                    {label}
+                  </span>
+                </li>
+              ),
+            )}
+          </ol>
+          <dl className="space-y-3 border-t border-outline-variant/60 pt-4 text-sm">
+            <div>
+              <dt className="text-xs font-bold tracking-wide text-on-surface-variant uppercase">
+                Room
+              </dt>
+              <dd className="font-semibold">{myRoom.room?.label ?? 'Not chosen yet'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-bold tracking-wide text-on-surface-variant uppercase">
+                Fault
+              </dt>
+              <dd className="flex items-center gap-2 font-semibold">
+                {category && <CategoryTile name={category.name} size="sm" />}
+                {item ? `${category?.name} › ${item.name}` : 'Not chosen yet'}
+              </dd>
+              {flagged && (
+                <dd className="mt-1 inline-block rounded-full bg-tertiary-container px-2 py-0.5 text-xs font-bold text-on-tertiary-container">
+                  {item?.defaultPriority === 'URGENT' ? 'Urgent' : 'High priority'}
+                </dd>
+              )}
+            </div>
+            {description.trim() && (
+              <div>
+                <dt className="text-xs font-bold tracking-wide text-on-surface-variant uppercase">
+                  Description
+                </dt>
+                <dd className="line-clamp-3">{description.trim()}</dd>
+              </div>
+            )}
+            {photos.length > 0 && (
+              <div>
+                <dt className="text-xs font-bold tracking-wide text-on-surface-variant uppercase">
+                  Photos
+                </dt>
+                <dd className="mt-1 flex gap-2">
+                  {photos.map((p, i) => (
+                    <img
+                      key={p.preview}
+                      src={p.preview}
+                      alt={`Photo ${i + 1}`}
+                      className="h-14 w-14 rounded-xl object-cover"
+                    />
+                  ))}
+                </dd>
+              </div>
+            )}
+          </dl>
+        </Card>
+        <Notice icon={<LightbulbIcon size={18} />}>
+          <strong className="block">What happens next</strong>A custodian reviews your report and
+          books a visit. You get an update at each step, and you confirm the fix at the end.
+        </Notice>
+      </aside>
+    </div>
+  );
+
   /* ---------------------------------------------------------------- step 1 */
   if (step === 1) {
-    return (
+    return frame(
       <div className="space-y-5">
         {header('Fault location & category')}
 
@@ -372,7 +456,7 @@ function ReportFlow({
 
         <section className="space-y-2">
           <Eyebrow>Select category *</Eyebrow>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             {categories.map((c) => {
               const active = c.id === categoryId;
               return (
@@ -469,13 +553,13 @@ function ReportFlow({
         <Button onClick={() => go(2)} disabled={!item || !myRoom.roomId}>
           Continue to details <ArrowRightIcon size={18} />
         </Button>
-      </div>
+      </div>,
     );
   }
 
   /* ---------------------------------------------------------------- step 2 */
   if (step === 2) {
-    return (
+    return frame(
       <div className="space-y-5">
         {header(
           'Problem details & photos',
@@ -609,12 +693,12 @@ function ReportFlow({
             Continue to availability <ArrowRightIcon size={18} />
           </Button>
         </div>
-      </div>
+      </div>,
     );
   }
 
   /* ---------------------------------------------------------------- step 3 */
-  return (
+  return frame(
     <div className="space-y-5">
       {header('Access availability & review')}
 
@@ -773,7 +857,7 @@ function ReportFlow({
           {busy === 'sending' ? 'Sending report…' : 'Submit request'} <SendIcon size={18} />
         </Button>
       </div>
-    </div>
+    </div>,
   );
 }
 
@@ -810,7 +894,7 @@ function SummaryRow({
 
 function Submitted({ result, onAnother }: { result: Result; onAnother: () => void }) {
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-xl space-y-4">
       <Card className="text-center">
         <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-success-container text-on-success-container">
           <CheckIcon size={32} />

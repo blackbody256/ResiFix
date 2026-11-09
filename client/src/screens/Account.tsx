@@ -35,44 +35,47 @@ export function Account() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Account</h1>
-      <Card>
-        <Eyebrow>Signed in as</Eyebrow>
-        <p className="mt-1 text-lg font-semibold">{user.name}</p>
-        <p className="text-sm text-on-surface-variant">
-          {ROLE[user.role] ?? user.role} · {user.phone}
-        </p>
-      </Card>
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+        <Card>
+          <Eyebrow>Signed in as</Eyebrow>
+          <p className="mt-1 text-lg font-semibold">{user.name}</p>
+          <p className="text-sm text-on-surface-variant">
+            {ROLE[user.role] ?? user.role} · {user.phone}
+          </p>
+        </Card>
 
-      <Card>
-        <div className="flex items-center gap-2">
-          <BellIcon size={20} className="text-primary" />
-          <h2 className="font-semibold">Notifications</h2>
-        </div>
-        {push && <p className="mt-2 text-sm text-on-surface-variant">{PUSH_TEXT[push]}</p>}
-        {push === 'default' && (
-          <Button
-            className="mt-4"
-            disabled={busy}
-            onClick={() => {
-              setBusy(true);
-              enablePush()
-                .then(setPush, () => setPush('unsupported'))
-                .finally(() => setBusy(false));
-            }}
-          >
-            {busy ? 'Turning on…' : 'Turn on notifications'}
-          </Button>
-        )}
-        {push === 'subscribed' && (
-          <Notice tone="success" className="mt-3">
-            You will get a notification when your report is reviewed, a visit is booked or the
-            repair is done.
-          </Notice>
-        )}
-      </Card>
+        <Card>
+          <div className="flex items-center gap-2">
+            <BellIcon size={20} className="text-primary" />
+            <h2 className="font-semibold">Notifications</h2>
+          </div>
+          {push && <p className="mt-2 text-sm text-on-surface-variant">{PUSH_TEXT[push]}</p>}
+          {push === 'default' && (
+            <Button
+              className="mt-4"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true);
+                enablePush()
+                  .then(setPush, () => setPush('unsupported'))
+                  .finally(() => setBusy(false));
+              }}
+            >
+              {busy ? 'Turning on…' : 'Turn on notifications'}
+            </Button>
+          )}
+          {push === 'subscribed' && (
+            <Notice tone="success" className="mt-3">
+              You will get a notification when your report is reviewed, a visit is booked or the
+              repair is done.
+            </Notice>
+          )}
+        </Card>
+      </div>
 
       <Button
         variant="danger"
+        className="lg:w-auto lg:px-8"
         onClick={() => {
           signOut();
           navigate('/login');
