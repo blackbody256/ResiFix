@@ -47,6 +47,7 @@ import { api, ApiError } from '../lib/api';
 import { cx } from '../lib/cx';
 import { MAX_PHOTOS, PHOTO_ACCEPT, preparePhoto } from '../lib/photos';
 import { categoryKind, type Priority } from '../lib/tickets';
+import { rememberRoom, useMyRoom } from '../lib/myRoom';
 import { useApi } from '../lib/useApi';
 
 const MAX_DESCRIPTION = 500;
@@ -72,12 +73,10 @@ const WINDOWS: { id: TimeWindow; label: string; hours: string; icon: ReactNode }
 ];
 
 /**
- * Proposed PB-005 / PB-008 contract (to agree with Amabe):
- *   POST /reporting/tickets
- *     { faultItemId, description, availability?: { days: ['YYYY-MM-DD'], windows: TimeWindow[],
- *       note? } }
- *   -> 201 { ticket: { id, reference, status } }
- * The room comes from the resident's current occupancy on the server, never from the client.
+ * PB-005 API (Amabe): POST /reporting/tickets { roomId, faultItemId, description? } -> { ticket }.
+ * The server rejects a room the resident does not currently live in (404).
+ * PB-008: there is nowhere to store availability yet (see docs/amabe-pb006-pb008-pb009-proposal.md),
+ * so it is added to the end of the description, where the custodian sees it on the ticket.
  */
 interface CreateTicketResponse {
   ticket: { id: string; reference?: string; status: string };
@@ -167,6 +166,7 @@ function ReportFlow({
 }) {
   const [params] = useSearchParams();
   const preset = categories.find((c) => c.id === params.get('category'));
+  const myRoom = useMyRoom();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [categoryId, setCategoryId] = useState(preset?.id ?? '');
   const [faultItemId, setFaultItemId] = useState('');
@@ -199,6 +199,7 @@ function ReportFlow({
 
   function go(next: 1 | 2 | 3) {
     setError('');
+    if (next >= 2 && !myRoom.roomId) return setError('Choose your room.');
     if (next >= 2 && !item) return setError('Choose what is broken.');
     if (next === 3 && description.trim().length < MIN_DESCRIPTION) {
       return setError(`Describe the problem in at least ${MIN_DESCRIPTION} characters.`);
@@ -234,21 +235,37 @@ function ReportFlow({
     setError(''); // e.g. "up to 2 photos" no longer applies once there is room again
   }
 
+  /** "Available: Tue 11 Nov, Wed 12 Nov · Morning, Evening. Access: roommate is in." */
+  function availabilityText() {
+    const note = accessNote.trim();
+    if (!days.length && !windows.length && !note) return '';
+    const when = [
+      dayOptions
+        .filter((d) => days.includes(d.iso))
+        .map((d) => `${d.weekday} ${d.iso.slice(8)}`)
+        .join(', '),
+      WINDOWS.filter((w) => windows.includes(w.id))
+        .map((w) => `${w.label} (${w.hours})`)
+        .join(', '),
+    ].filter(Boolean);
+    return [when.length && `Available: ${when.join(' · ')}.`, note && `Access: ${note}`]
+      .filter(Boolean)
+      .join(' ');
+  }
+
   async function submit() {
-    if (!item) return setStep(1);
+    if (!item || !myRoom.roomId) return setStep(1);
     setBusy('sending');
     setError('');
     let ticketId: string;
     let reference: string | undefined;
     try {
-      const note = accessNote.trim();
       const { ticket } = await api.post<CreateTicketResponse>('/reporting/tickets', {
+        roomId: myRoom.roomId,
         faultItemId: item.id,
-        description: description.trim(),
-        ...((days.length > 0 || windows.length > 0 || note) && {
-          availability: { days, windows, ...(note && { note }) },
-        }),
+        description: [description.trim(), availabilityText()].filter(Boolean).join('\n\n'),
       });
+      rememberRoom(myRoom.roomId);
       ticketId = ticket.id;
       reference = ticket.reference;
     } catch (err) {
@@ -301,15 +318,37 @@ function ReportFlow({
           <div className="flex items-center gap-3 rounded-3xl border-2 border-primary bg-surface p-4">
             <CheckCircleIcon size={24} className="shrink-0 text-primary" />
             <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-2 font-bold">
+              <label htmlFor="room" className="flex items-center gap-2 font-bold">
                 My room
-                <span className="rounded-full bg-primary-container px-2 py-0.5 text-xs font-semibold text-on-primary-container">
-                  Verified
-                </span>
-              </p>
-              <p className="text-sm text-on-surface-variant">
-                Your room from the hall’s records is used automatically.
-              </p>
+                {myRoom.room && (
+                  <span className="rounded-full bg-primary-container px-2 py-0.5 text-xs font-semibold text-on-primary-container">
+                    {myRoom.room.label}
+                  </span>
+                )}
+              </label>
+              <select
+                id="room"
+                value={myRoom.roomId}
+                onChange={(e) => {
+                  myRoom.setRoomId(e.target.value);
+                  setError('');
+                }}
+                disabled={myRoom.loading}
+                className="mt-2 w-full rounded-2xl border border-outline-variant bg-surface px-3 py-2.5 text-sm"
+              >
+                <option value="">{myRoom.loading ? 'Loading rooms…' : 'Choose your room'}</option>
+                {[...new Set(myRoom.rooms.map((r) => r.block))].map((block) => (
+                  <optgroup key={block} label={block}>
+                    {myRoom.rooms
+                      .filter((r) => r.block === block)
+                      .map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.label}
+                        </option>
+                      ))}
+                  </optgroup>
+                ))}
+              </select>
             </div>
           </div>
           <div
@@ -427,7 +466,7 @@ function ReportFlow({
         )}
 
         <ErrorText>{error}</ErrorText>
-        <Button onClick={() => go(2)} disabled={!item}>
+        <Button onClick={() => go(2)} disabled={!item || !myRoom.roomId}>
           Continue to details <ArrowRightIcon size={18} />
         </Button>
       </div>
@@ -455,7 +494,7 @@ function ReportFlow({
               {category?.name} › {item?.name}
             </p>
             <p className="flex items-center gap-1 text-sm text-on-surface-variant">
-              <BuildingIcon size={14} /> My room
+              <BuildingIcon size={14} /> {myRoom.room?.label ?? 'My room'}
             </p>
           </div>
           <button
@@ -675,7 +714,7 @@ function ReportFlow({
           )}
         </div>
         <SummaryRow icon={<BuildingIcon size={18} />} label="Location" onEdit={() => setStep(1)}>
-          My room
+          {myRoom.room?.label ?? 'My room'}
         </SummaryRow>
         <SummaryRow
           icon={
