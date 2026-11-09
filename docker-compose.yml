@@ -111,5 +111,3 @@ volumes:
   pgdata:
   redisdata:
   miniodata:
-
-
