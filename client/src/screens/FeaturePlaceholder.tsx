@@ -16,7 +16,7 @@ export function FeaturePlaceholder({
   return (
     <Card>
       <h1 className="text-xl font-semibold">{title}</h1>
-      <p className="mb-4 text-sm text-slate-500">
+      <p className="mb-4 text-sm text-on-surface-variant">
         Owner: {owner} · Backlog: {backlog}
       </p>
       {children}
@@ -25,5 +25,5 @@ export function FeaturePlaceholder({
 }
 
 export function Loading() {
-  return <p className="text-sm text-slate-500">Loading…</p>;
+  return <p className="text-sm text-on-surface-variant">Loading…</p>;
 }

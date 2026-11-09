@@ -43,13 +43,25 @@ export class TicketsService {
     return user.role === Role.RESIDENT ? { reporterId: user.id } : {};
   }
 
-  list(user: AuthUser, scope: PropertyScope) {
-    return this.prisma.ticket.findMany({
+  /** Ticket cards: category, who has the job and the next booked visit, so no per-card fetch. */
+  async list(user: AuthUser, scope: PropertyScope) {
+    const tickets = await this.prisma.ticket.findMany({
       where: scope.where<Prisma.TicketWhereInput>(this.visibleTo(user)),
       orderBy: { createdAt: 'desc' },
       take: 50,
-      include: { room: { include: { block: true } }, faultItem: true },
+      include: {
+        room: { include: { block: true } },
+        faultItem: { include: { category: true } },
+        assignee: { select: { id: true, name: true } },
+        visits: {
+          where: { missed: false, arrivedAt: null },
+          orderBy: { scheduledAt: 'asc' },
+          take: 1,
+          select: { id: true, scheduledAt: true },
+        },
+      },
     });
+    return tickets.map(({ visits, ...ticket }) => ({ ...ticket, nextVisit: visits[0] ?? null }));
   }
 
   /**

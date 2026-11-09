@@ -1,17 +1,65 @@
 @import 'tailwindcss';
 
+/* The design is light-only: `dark:` utilities left in older screens only apply under an
+   explicit .dark class, which the app never sets, so a dark OS theme cannot half-apply. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Design tokens from the Group J Figma file (page 1). Names follow the design so screens
+   can say `bg-primary`, `text-on-surface-variant`, `bg-tertiary-container` and so on.
+   `brand-*` is kept as an alias of the primary green so older screens pick up the theme.
+   System fonts on purpose: the PWA must open offline and on slow data, with no font download. */
 @theme {
-  --color-brand-50: #f0fdfa;
-  --color-brand-500: #14b8a6;
-  --color-brand-600: #0d9488;
-  --color-brand-700: #0f766e;
+  --font-sans:
+    'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', Arial, ui-sans-serif, system-ui, sans-serif;
+
+  --color-primary: #2f5d2c;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #bcf0b4;
+  --color-on-primary-container: #245024;
+
+  --color-secondary: #546524;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #d7eb9b;
+  --color-on-secondary-container: #3d4c0d;
+
+  --color-tertiary: #ee1c25;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #ffdad6;
+  --color-on-tertiary-container: #9e2126;
+
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #b7070c;
+
+  --color-surface: #fff8f2;
+  --color-on-surface: #201b13;
+  --color-surface-variant: #e8e2d0;
+  --color-on-surface-variant: #49473a;
+  --color-outline: #7a7768;
+  --color-outline-variant: #cbc7b5;
+
+  --color-success: #54d85a;
+  --color-on-success: #ffffff;
+  --color-success-container: #cbffc2;
+  --color-on-success-container: #0d631b;
+
+  /* Aliases used across the app before the redesign. */
+  --color-brand-50: #bcf0b4;
+  --color-brand-500: #3f7a3b;
+  --color-brand-600: #3a6f36;
+  --color-brand-700: #2f5d2c;
 }
 
 @layer base {
   html {
-    color-scheme: light dark;
+    color-scheme: light;
+    -webkit-tap-highlight-color: transparent;
   }
   body {
-    @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+    @apply bg-secondary-container font-sans text-on-surface antialiased;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-primary;
   }
 }

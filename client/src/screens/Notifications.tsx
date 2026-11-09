@@ -2,10 +2,12 @@
 // Opening an update marks it read and goes to its ticket.
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Card, ErrorText } from '../components/ui';
+import { BellIcon, ChevronRightIcon } from '../components/icons';
+import { Card, ErrorText, Spinner } from '../components/ui';
+import { cx } from '../lib/cx';
 import { api, ApiError } from '../lib/api';
+import { when } from '../lib/tickets';
 import { useApi } from '../lib/useApi';
-import { Loading } from './FeaturePlaceholder';
 
 interface Notification {
   id: string;
@@ -18,9 +20,6 @@ interface InboxResponse {
   notifications: Notification[];
   unread: number;
 }
-
-const when = (iso: string) =>
-  new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
 /** Messages are stored as "Title: body"; show the title in bold. */
 function split(message: string) {
@@ -62,33 +61,37 @@ export function Notifications() {
     });
 
   return (
-    <Card>
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <h1 className="text-xl font-semibold">Updates</h1>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="text-2xl font-bold">Updates</h1>
         {data && data.unread > 0 && (
           <>
-            <span className="rounded-full bg-brand-700 px-2 py-0.5 text-xs font-semibold text-white">
+            <span className="rounded-full bg-tertiary px-2.5 py-0.5 text-xs font-bold text-on-tertiary">
               {data.unread} new
             </span>
             <button
               type="button"
               onClick={readAll}
               disabled={busy}
-              className="ml-auto text-sm text-brand-700 underline disabled:opacity-60 dark:text-brand-500"
+              className="ml-auto text-sm font-semibold text-primary disabled:opacity-60"
             >
               Mark all as read
             </button>
           </>
         )}
       </div>
-      {loading && <Loading />}
-      <ErrorText>{error?.message ?? actionError}</ErrorText>
+      {loading && <Spinner />}
+      {(error || actionError) && <ErrorText>{error?.message ?? actionError}</ErrorText>}
       {data && data.notifications.length === 0 && (
-        <p className="text-sm text-slate-500">
-          No updates yet. We will tell you here when something happens on your tickets.
-        </p>
+        <Card className="text-center">
+          <BellIcon size={28} className="mx-auto text-primary" />
+          <p className="mt-2 font-semibold">No updates yet</p>
+          <p className="text-sm text-on-surface-variant">
+            We will tell you here when something happens on your tickets.
+          </p>
+        </Card>
       )}
-      <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+      <ul className="space-y-2">
         {data?.notifications.map((n) => {
           const { title, body } = split(n.message);
           const unread = !n.readAt;
@@ -97,25 +100,34 @@ export function Notifications() {
               <button
                 type="button"
                 onClick={() => void open(n)}
-                className="flex w-full gap-3 py-3 text-left hover:text-brand-700"
+                className={cx(
+                  'flex w-full gap-3 rounded-3xl p-4 text-left shadow-sm transition hover:shadow-md',
+                  unread ? 'bg-surface ring-2 ring-primary/30' : 'bg-surface/70',
+                )}
               >
                 <span
                   aria-hidden
-                  className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${unread ? 'bg-brand-600' : ''}`}
+                  className={cx(
+                    'mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full',
+                    unread ? 'bg-tertiary' : 'bg-outline-variant',
+                  )}
                 />
-                <span className="min-w-0">
-                  <span className={`block ${unread ? 'font-semibold' : ''}`}>
+                <span className="min-w-0 flex-1">
+                  <span className={cx('block', unread ? 'font-bold' : 'font-semibold')}>
                     {title}
                     {unread && <span className="sr-only"> (new)</span>}
                   </span>
-                  {body && <span className="block text-sm">{body}</span>}
-                  <span className="block text-xs text-slate-500">{when(n.createdAt)}</span>
+                  {body && <span className="block text-sm text-on-surface-variant">{body}</span>}
+                  <span className="mt-1 block text-xs text-outline">{when(n.createdAt)}</span>
                 </span>
+                {n.ticketId && (
+                  <ChevronRightIcon size={18} className="mt-1 shrink-0 text-outline" />
+                )}
               </button>
             </li>
           );
         })}
       </ul>
-    </Card>
+    </div>
   );
 }
