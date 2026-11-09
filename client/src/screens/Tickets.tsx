@@ -11,6 +11,7 @@ import {
   CalendarIcon,
   CheckCircleIcon,
   CheckIcon,
+  ChevronRightIcon,
   ClockIcon,
   PlusCircleIcon,
   SearchIcon,
@@ -18,7 +19,7 @@ import {
   StarIcon,
   TicketIcon,
 } from '../components/icons';
-import { StatusPill, TicketCard } from '../components/tickets';
+import { CategoryTile, StatusPill, TicketCard } from '../components/tickets';
 import {
   Badge,
   Button,
@@ -27,11 +28,13 @@ import {
   Eyebrow,
   Notice,
   Spinner,
+  StatCard,
   Textarea,
 } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { cx } from '../lib/cx';
 import {
+  ago,
   isOpen,
   placeLabel,
   priorityLabel,
@@ -121,6 +124,7 @@ function TicketList() {
   };
   const needAction = tickets.filter((t) => t.status === 'COMPLETED').length;
   const statuses = [...new Set(tickets.map((t) => t.status))];
+  const countOf = (st: TicketStatus) => tickets.filter((t) => t.status === st).length;
 
   const q = query.trim().toLowerCase();
   const shown = tickets.filter((t) => {
@@ -149,9 +153,48 @@ function TicketList() {
             <span className="h-1.5 w-1.5 rounded-full bg-tertiary" /> {needAction} action required
           </span>
         )}
+        {user?.role === 'RESIDENT' && (
+          <Link
+            to="/report"
+            className={cx(
+              'hidden items-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary shadow-sm lg:flex',
+              needAction === 0 && 'ml-auto',
+            )}
+          >
+            <PlusCircleIcon size={18} /> Report a fault
+          </Link>
+        )}
       </div>
 
-      <div className="grid grid-cols-3 gap-1 rounded-2xl bg-surface p-1 shadow-sm" role="tablist">
+      {/* Laptop: KPI cards double as filters (desktop design, page 23). */}
+      <div className="hidden gap-3 lg:grid lg:grid-cols-5">
+        {(
+          [
+            ['All', counts.all, 'all', 'ALL', 'default'],
+            ['Open', counts.open, 'open', 'ALL', 'default'],
+            ['Visit scheduled', countOf('SCHEDULED'), 'all', 'SCHEDULED', 'default'],
+            ['Confirm repair', needAction, 'all', 'COMPLETED', needAction ? 'alert' : 'default'],
+            ['Closed', counts.closed, 'closed', 'ALL', 'good'],
+          ] as const
+        ).map(([label, value, t, st, tone]) => (
+          <StatCard
+            key={label}
+            label={label}
+            value={value}
+            tone={tone}
+            active={tab === t && status === st}
+            onClick={() => {
+              setTab(t);
+              setStatus(st);
+            }}
+          />
+        ))}
+      </div>
+
+      <div
+        className="grid grid-cols-3 gap-1 rounded-2xl bg-surface p-1 shadow-sm lg:hidden"
+        role="tablist"
+      >
         {(['all', 'open', 'closed'] as const).map((key) => (
           <button
             key={key}
@@ -181,7 +224,7 @@ function TicketList() {
       </label>
 
       {statuses.length > 1 && (
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:hidden">
           {(['ALL', ...statuses] as const).map((s) => (
             <button
               key={s}
@@ -215,20 +258,98 @@ function TicketList() {
         </Card>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-3 lg:hidden">
         {shown.map((t) => (
           <TicketCard key={t.id} ticket={t} />
         ))}
       </div>
+      {shown.length > 0 && <TicketTable tickets={shown} />}
 
       {user?.role === 'RESIDENT' && (
         <Link
           to="/report"
-          className="fixed right-4 bottom-24 z-10 flex items-center gap-2 rounded-2xl bg-primary px-5 py-3.5 font-semibold text-on-primary shadow-lg sm:right-[max(1rem,calc(50%-20rem))]"
+          className="fixed right-4 bottom-24 z-10 flex items-center gap-2 rounded-2xl bg-primary px-5 py-3.5 font-semibold text-on-primary shadow-lg sm:right-[max(1rem,calc(50%-20rem))] lg:hidden"
         >
           <PlusCircleIcon size={20} /> Report fault
         </Link>
       )}
+    </div>
+  );
+}
+
+/** Laptop table (desktop design, page 23): one row per ticket, the whole row opens it. */
+function TicketTable({ tickets }: { tickets: TicketSummary[] }) {
+  const navigate = useNavigate();
+  return (
+    <div className="hidden overflow-hidden rounded-3xl bg-surface shadow-sm lg:block">
+      <table className="w-full text-left text-sm">
+        <thead className="bg-surface-variant/60 text-xs font-bold tracking-wide text-on-surface-variant uppercase">
+          <tr>
+            <th className="px-4 py-3">Ticket</th>
+            <th className="px-4 py-3">Fault &amp; location</th>
+            <th className="px-4 py-3">Category</th>
+            <th className="px-4 py-3">Status</th>
+            <th className="px-4 py-3">Next step</th>
+            <th className="px-4 py-3">Reported</th>
+            <th className="w-10" aria-label="Open" />
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-outline-variant/50">
+          {tickets.map((t) => (
+            <tr
+              key={t.id}
+              onClick={() => navigate(`/tickets?focus=${t.id}`)}
+              className={cx(
+                'cursor-pointer border-l-4 transition-colors hover:bg-primary-container/30',
+                STATUS[t.status]?.accent,
+              )}
+            >
+              <td className="px-4 py-3 font-mono text-xs font-semibold">
+                <Link to={`/tickets?focus=${t.id}`} onClick={(e) => e.stopPropagation()}>
+                  {ticketRef(t)}
+                </Link>
+              </td>
+              <td className="px-4 py-3">
+                <p className="font-bold">{t.faultItem.name}</p>
+                <p className="text-xs text-on-surface-variant">{placeLabel(t)}</p>
+              </td>
+              <td className="px-4 py-3">
+                <span className="flex items-center gap-2">
+                  <CategoryTile name={t.faultItem.category.name} size="sm" />
+                  {t.faultItem.category.name}
+                </span>
+              </td>
+              <td className="px-4 py-3">
+                <StatusPill status={t.status} />
+              </td>
+              <td className="px-4 py-3 text-xs">
+                {t.status === 'COMPLETED' ? (
+                  <span className="font-semibold text-on-tertiary-container">
+                    Confirm the repair
+                  </span>
+                ) : t.nextVisit ? (
+                  <>
+                    Visit {when(t.nextVisit.scheduledAt)}
+                    {t.assignee && (
+                      <span className="block text-on-surface-variant">{t.assignee.name}</span>
+                    )}
+                  </>
+                ) : isOpen(t.status) ? (
+                  <span className="text-on-surface-variant">
+                    {t.assignee ? `With ${t.assignee.name}` : 'Waiting for review'}
+                  </span>
+                ) : (
+                  <span className="text-on-surface-variant">Done</span>
+                )}
+              </td>
+              <td className="px-4 py-3 text-xs text-on-surface-variant">{ago(t.createdAt)}</td>
+              <td className="pr-4 text-outline">
+                <ChevronRightIcon size={18} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -297,26 +418,48 @@ function TicketView({ id }: { id: string }) {
       {error && <ErrorText>{friendly(error)}</ErrorText>}
 
       {t && (
-        <>
-          <Summary t={t} />
-          {t.status === 'COMPLETED' && isReporter && <ConfirmRepair t={t} onDone={reload} />}
-          <UpcomingVisit t={t} canAsk={isReporter} />
-          <Progress t={t} />
-          <Evidence t={t} />
-          {!(t.status === 'COMPLETED' && isReporter) && t.repairProofs.length > 0 && (
-            <Proof t={t} />
-          )}
-          {t.rating && (
-            <Card>
-              <Eyebrow>Your rating</Eyebrow>
-              <div className="mt-2">
-                <Stars value={t.rating.score} />
+        // Phone: one column in reading order (order-*). Laptop: details left, and the visit and
+        // progress in a sticky right column, like the desktop design's two-column pages.
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:items-start">
+          <div className="contents lg:col-span-2 lg:block lg:space-y-4">
+            <div className="order-1">
+              <Summary t={t} />
+            </div>
+            {t.status === 'COMPLETED' && isReporter && (
+              <div className="order-2">
+                <ConfirmRepair t={t} onDone={reload} />
               </div>
-              {t.rating.comment && <p className="mt-2 text-sm">{t.rating.comment}</p>}
-            </Card>
-          )}
-          <Activity t={t} />
-        </>
+            )}
+            <div className="order-5">
+              <Evidence t={t} />
+            </div>
+            {!(t.status === 'COMPLETED' && isReporter) && t.repairProofs.length > 0 && (
+              <div className="order-6">
+                <Proof t={t} />
+              </div>
+            )}
+            {t.rating && (
+              <Card className="order-7">
+                <Eyebrow>Your rating</Eyebrow>
+                <div className="mt-2">
+                  <Stars value={t.rating.score} />
+                </div>
+                {t.rating.comment && <p className="mt-2 text-sm">{t.rating.comment}</p>}
+              </Card>
+            )}
+            <div className="order-8">
+              <Activity t={t} />
+            </div>
+          </div>
+          <div className="contents lg:sticky lg:top-24 lg:block lg:space-y-4">
+            <div className="order-3">
+              <UpcomingVisit t={t} canAsk={isReporter} />
+            </div>
+            <div className="order-4">
+              <Progress t={t} />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

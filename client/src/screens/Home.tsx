@@ -7,12 +7,13 @@ import {
   BuildingIcon,
   CalendarIcon,
   CheckCircleIcon,
+  CheckIcon,
   PlusCircleIcon,
   TicketIcon,
   WrenchIcon,
 } from '../components/icons';
 import { CategoryTile, TicketCard } from '../components/tickets';
-import { Card, ErrorText, Eyebrow, Spinner } from '../components/ui';
+import { Card, ErrorText, Eyebrow, Spinner, StatCard } from '../components/ui';
 import { isOpen, relative, ticketRef, when, type TicketSummary } from '../lib/tickets';
 import { useApi } from '../lib/useApi';
 
@@ -61,109 +62,160 @@ function ResidentHome({ first }: { first: string }) {
     .filter((t) => t.nextVisit)
     .sort((a, b) => a.nextVisit!.scheduledAt.localeCompare(b.nextVisit!.scheduledAt))[0];
 
+  const closed = all.filter((t) => !isOpen(t.status)).length;
+  const booked = open.filter((t) => t.nextVisit).length;
+
   return (
     <div className="space-y-5">
       <Hello first={first} />
 
-      <section className="rounded-3xl bg-primary p-5 text-on-primary shadow-md">
-        <Link to="/report" className="flex items-center gap-4">
-          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-white/15">
-            <WrenchIcon size={24} />
-          </span>
-          <span className="flex-1">
-            <span className="block text-lg font-bold">Report a Fault</span>
-            <span className="text-sm opacity-85">Takes less than 1 minute</span>
-          </span>
-          <span className="grid h-11 w-11 place-items-center rounded-full bg-on-primary text-primary">
-            <PlusCircleIcon size={24} />
-          </span>
-        </Link>
-        {catalogue.data && catalogue.data.categories.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {catalogue.data.categories.slice(0, 4).map((c) => (
-              <Link
-                key={c.id}
-                to={`/report?category=${c.id}`}
-                className="flex items-center gap-1.5 rounded-full bg-white/15 py-1 pr-3 pl-1 text-sm font-semibold hover:bg-white/25"
-              >
-                <CategoryTile name={c.name} size="sm" plain className="rounded-full bg-white/20" />
-                {c.name}
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {tickets.loading && <Spinner />}
-      {tickets.error && <ErrorText>{tickets.error.message}</ErrorText>}
-
-      {toConfirm.map((t) => (
-        <Link
-          key={t.id}
-          to={`/tickets?focus=${t.id}`}
-          className="flex items-center gap-3 rounded-3xl bg-tertiary-container p-4 text-on-tertiary-container shadow-sm"
-        >
-          <CheckCircleIcon size={28} className="shrink-0" />
-          <span className="min-w-0 flex-1">
-            <span className="block text-xs font-bold tracking-wide uppercase">Action required</span>
-            <span className="block font-bold">Is the {t.faultItem.name.toLowerCase()} fixed?</span>
-            <span className="text-sm">Confirm the repair or tell us it is still a problem.</span>
-          </span>
-          <ArrowRightIcon size={20} />
-        </Link>
-      ))}
-
-      {nextVisit && (
-        <Card>
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-success" aria-hidden />
-            <Eyebrow>Upcoming scheduled visit</Eyebrow>
-            <span className="ml-auto rounded-full bg-primary-container px-2.5 py-0.5 text-xs font-semibold text-on-primary-container">
-              {relative(nextVisit.nextVisit!.scheduledAt)}
-            </span>
-          </div>
-          <p className="mt-3 text-lg font-bold">{nextVisit.assignee?.name ?? 'Your custodian'}</p>
-          <p className="text-sm text-on-surface-variant">
-            {nextVisit.faultItem.name} ({ticketRef(nextVisit)})
-          </p>
-          <p className="mt-2 flex items-center gap-1.5 text-sm font-semibold text-primary">
-            <CalendarIcon size={16} /> {when(nextVisit.nextVisit!.scheduledAt)}
-          </p>
-          <Link
-            to={`/tickets?focus=${nextVisit.id}`}
-            className="mt-3 flex items-center justify-between rounded-2xl bg-surface-variant/60 px-3 py-2 text-sm"
-          >
-            Not in your room then? Ask for another time.
-            <span className="font-semibold text-primary">Details</span>
-          </Link>
-        </Card>
-      )}
-
+      {/* Laptop: the desktop design's KPI row. */}
       {tickets.data && (
-        <section>
-          <div className="mb-2 flex items-end justify-between">
-            <h2 className="text-xl font-bold">My open tickets</h2>
-            <Link to="/tickets" className="text-sm font-semibold text-primary">
-              See all
-            </Link>
-          </div>
-          {open.length === 0 ? (
-            <Card className="text-center">
-              <TicketIcon size={28} className="mx-auto text-primary" />
-              <p className="mt-2 font-semibold">Nothing open right now</p>
-              <p className="text-sm text-on-surface-variant">
-                If something breaks, report it and we will keep you posted.
-              </p>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {open.slice(0, 3).map((t) => (
-                <TicketCard key={t.id} ticket={t} />
-              ))}
-            </div>
-          )}
-        </section>
+        <div className="hidden gap-4 lg:grid lg:grid-cols-4">
+          <StatCard
+            label="Open tickets"
+            value={open.length}
+            icon={<TicketIcon size={18} />}
+            hint="Being handled"
+          />
+          <StatCard
+            label="Visits booked"
+            value={booked}
+            icon={<CalendarIcon size={18} />}
+            hint="Custodian coming"
+          />
+          <StatCard
+            label="Action required"
+            value={toConfirm.length}
+            tone={toConfirm.length ? 'alert' : 'default'}
+            icon={<CheckCircleIcon size={18} />}
+            hint="Repairs to confirm"
+          />
+          <StatCard
+            label="Resolved"
+            value={closed}
+            tone="good"
+            icon={<CheckIcon size={18} />}
+            hint="Fixed and closed"
+          />
+        </div>
       )}
+
+      <div className="grid gap-5 lg:grid-cols-3 lg:items-start">
+        <div className="space-y-5 lg:sticky lg:top-24 lg:order-2">
+          <section className="rounded-3xl bg-primary p-5 text-on-primary shadow-md">
+            <Link to="/report" className="flex items-center gap-4">
+              <span className="grid h-12 w-12 place-items-center rounded-2xl bg-white/15">
+                <WrenchIcon size={24} />
+              </span>
+              <span className="flex-1">
+                <span className="block text-lg font-bold">Report a Fault</span>
+                <span className="text-sm opacity-85">Takes less than 1 minute</span>
+              </span>
+              <span className="grid h-11 w-11 place-items-center rounded-full bg-on-primary text-primary">
+                <PlusCircleIcon size={24} />
+              </span>
+            </Link>
+            {catalogue.data && catalogue.data.categories.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {catalogue.data.categories.slice(0, 4).map((c) => (
+                  <Link
+                    key={c.id}
+                    to={`/report?category=${c.id}`}
+                    className="flex items-center gap-1.5 rounded-full bg-white/15 py-1 pr-3 pl-1 text-sm font-semibold hover:bg-white/25"
+                  >
+                    <CategoryTile
+                      name={c.name}
+                      size="sm"
+                      plain
+                      className="rounded-full bg-white/20"
+                    />
+                    {c.name}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+          {nextVisit && (
+            <Card>
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-success" aria-hidden />
+                <Eyebrow>Upcoming scheduled visit</Eyebrow>
+                <span className="ml-auto rounded-full bg-primary-container px-2.5 py-0.5 text-xs font-semibold text-on-primary-container">
+                  {relative(nextVisit.nextVisit!.scheduledAt)}
+                </span>
+              </div>
+              <p className="mt-3 text-lg font-bold">
+                {nextVisit.assignee?.name ?? 'Your custodian'}
+              </p>
+              <p className="text-sm text-on-surface-variant">
+                {nextVisit.faultItem.name} ({ticketRef(nextVisit)})
+              </p>
+              <p className="mt-2 flex items-center gap-1.5 text-sm font-semibold text-primary">
+                <CalendarIcon size={16} /> {when(nextVisit.nextVisit!.scheduledAt)}
+              </p>
+              <Link
+                to={`/tickets?focus=${nextVisit.id}`}
+                className="mt-3 flex items-center justify-between rounded-2xl bg-surface-variant/60 px-3 py-2 text-sm"
+              >
+                Not in your room then? Ask for another time.
+                <span className="font-semibold text-primary">Details</span>
+              </Link>
+            </Card>
+          )}
+        </div>
+
+        <div className="space-y-5 lg:order-1 lg:col-span-2">
+          {tickets.loading && <Spinner />}
+          {tickets.error && <ErrorText>{tickets.error.message}</ErrorText>}
+          {toConfirm.map((t) => (
+            <Link
+              key={t.id}
+              to={`/tickets?focus=${t.id}`}
+              className="flex items-center gap-3 rounded-3xl bg-tertiary-container p-4 text-on-tertiary-container shadow-sm"
+            >
+              <CheckCircleIcon size={28} className="shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-bold tracking-wide uppercase">
+                  Action required
+                </span>
+                <span className="block font-bold">
+                  Is the {t.faultItem.name.toLowerCase()} fixed?
+                </span>
+                <span className="text-sm">
+                  Confirm the repair or tell us it is still a problem.
+                </span>
+              </span>
+              <ArrowRightIcon size={20} />
+            </Link>
+          ))}
+          {tickets.data && (
+            <section>
+              <div className="mb-2 flex items-end justify-between">
+                <h2 className="text-xl font-bold">My open tickets</h2>
+                <Link to="/tickets" className="text-sm font-semibold text-primary">
+                  See all
+                </Link>
+              </div>
+              {open.length === 0 ? (
+                <Card className="text-center">
+                  <TicketIcon size={28} className="mx-auto text-primary" />
+                  <p className="mt-2 font-semibold">Nothing open right now</p>
+                  <p className="text-sm text-on-surface-variant">
+                    If something breaks, report it and we will keep you posted.
+                  </p>
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {open.slice(0, 6).map((t) => (
+                    <TicketCard key={t.id} ticket={t} />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -61,7 +61,7 @@ export function Notifications() {
     });
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-3xl space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-2xl font-bold">Updates</h1>
         {data && data.unread > 0 && (

@@ -156,3 +156,59 @@ export function Spinner({ label = 'Loading…' }: { label?: string }) {
     </p>
   );
 }
+
+/** KPI tile from the desktop design's top row: label, big number, optional icon and hint. */
+export function StatCard({
+  label,
+  value,
+  icon,
+  hint,
+  tone = 'default',
+  active = false,
+  onClick,
+}: {
+  label: string;
+  value: ReactNode;
+  icon?: ReactNode;
+  hint?: ReactNode;
+  tone?: 'default' | 'alert' | 'good';
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  const tones = {
+    default: 'text-primary',
+    alert: 'text-tertiary',
+    good: 'text-on-success-container',
+  };
+  const body = (
+    <>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs font-bold tracking-wide text-on-surface-variant uppercase">{label}</p>
+        {icon && (
+          <span
+            className={cx(
+              'grid h-8 w-8 place-items-center rounded-xl bg-surface-variant',
+              tones[tone],
+            )}
+          >
+            {icon}
+          </span>
+        )}
+      </div>
+      <p className={cx('mt-1 text-3xl font-extrabold', tones[tone])}>{value}</p>
+      {hint && <p className="mt-1 text-xs text-on-surface-variant">{hint}</p>}
+    </>
+  );
+  const classes = cx(
+    'block w-full rounded-3xl border-2 bg-surface p-4 text-left shadow-sm transition',
+    active ? 'border-primary' : 'border-transparent',
+    onClick && 'hover:border-outline-variant',
+  );
+  return onClick ? (
+    <button type="button" onClick={onClick} aria-pressed={active} className={classes}>
+      {body}
+    </button>
+  ) : (
+    <div className={classes}>{body}</div>
+  );
+}
