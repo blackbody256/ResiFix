@@ -1,20 +1,22 @@
 // OWNER: Amabe / Ayan
 // TODO:
-//   [ ] PB-005  report a room fault: create a ticket with a unique reference (UI by Ayan).
+//   [x] PB-005  report a room fault: create a ticket (UI by Ayan).
 //               After creating it: ResponseTargetsService.startClock(id) (import CustodianModule)
 //               and CustodianAlertsService.ticketReported(id) (NotificationsModule)
 //   [ ] PB-006  report a shared-facility fault (UI by Ayan)
-//   [ ] PB-007  upload up to two photos: upload and presigned links work; still to do: the
-//               limit of two per ticket, on-device compression in the UI (Ayan)
+//   [x] PB-007  upload photos: upload and presigned links work; still to do: the limit of two
+//               per ticket and on-device compression in the UI (Ayan)
 //   [ ] PB-008  provide availability for scheduling (UI by Ayan)
 //   [ ] PB-009  follow a shared fault instead of reporting a duplicate
-import { Controller, Get, Param, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { type Prisma, PhotoKind, Role } from '@prisma/client';
-import { badRequest, notFound, notImplemented } from '../common/app-exception';
+import { Prisma, PhotoKind, Role } from '@prisma/client';
+import { z } from 'zod';
+import { badRequest, conflict, notFound } from '../common/app-exception';
 import { CurrentUser, Roles, Scope } from '../common/decorators';
 import type { PropertyScope } from '../common/property-scope';
 import type { AuthUser } from '../auth/auth-user';
+import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 
@@ -24,6 +26,11 @@ const PHOTO_TYPES: Record<string, string> = {
   'image/png': 'png',
   'image/webp': 'webp',
 };
+const CreateTicketBody = z.object({
+  roomId: z.string().trim().min(1),
+  faultItemId: z.string().trim().min(1),
+  description: z.string().trim().max(2000).optional(),
+});
 
 @Controller('reporting')
 export class ReportingController {
@@ -45,8 +52,38 @@ export class ReportingController {
 
   @Post('tickets')
   @Roles(Role.RESIDENT)
-  createTicket() {
-    notImplemented('PB-005');
+  async createTicket(
+    @Body(new ZodValidationPipe(CreateTicketBody)) body: z.infer<typeof CreateTicketBody>,
+    @CurrentUser() user: AuthUser,
+    @Scope() scope: PropertyScope,
+  ) {
+    const [occupancy, faultItem] = await Promise.all([
+      this.prisma.occupancy.findFirst({
+        where: {
+          userId: user.id,
+          roomId: body.roomId,
+          endDate: null,
+          room: { block: { propertyId: scope.propertyId } },
+        },
+      }),
+      this.prisma.faultItem.findFirst({
+        where: scope.where<Prisma.FaultItemWhereInput>({ id: body.faultItemId }, 'category'),
+      }),
+    ]);
+    if (!occupancy) throw notFound('You are not assigned to this room');
+    if (!faultItem) throw notFound('Fault item not found');
+
+    const ticket = await this.prisma.ticket.create({
+      data: scope.data({
+        roomId: body.roomId,
+        reporterId: user.id,
+        faultItemId: faultItem.id,
+        description: body.description || undefined,
+        priority: faultItem.defaultPriority,
+      }),
+      include: { room: { include: { block: true } }, faultItem: true },
+    });
+    return { ticket };
   }
 
   /** multipart/form-data with field `photo`. POST /api/reporting/tickets/:id/photos */
@@ -67,6 +104,11 @@ export class ReportingController {
       where: scope.where<Prisma.TicketWhereInput>({ id: ticketId, reporterId: user.id }),
     });
     if (!ticket) throw notFound('Ticket not found');
+
+    const reportPhotoCount = await this.prisma.photo.count({
+      where: { ticketId: ticket.id, kind: PhotoKind.REPORT },
+    });
+    if (reportPhotoCount >= 2) throw conflict('A ticket can have at most two report photos');
 
     const key = this.storage.photoKey(scope.propertyId, ticket.id, ext);
     await this.storage.put(key, file.buffer, file.mimetype);
