@@ -72,16 +72,16 @@ export const NEXT_STEP: Record<NextStep, { action: string; hint: string }> = {
   AWAIT_RESIDENT: { action: 'View', hint: 'Waiting for the resident to confirm' },
 };
 
-/** Colours for each target state: [text, soft background]. */
+/** Colours for each target state (soft = background + text). */
 export const TARGET_TONE: Record<TargetState, { text: string; soft: string; label: string }> = {
   OVERDUE: {
-    text: 'text-tertiary',
-    soft: 'bg-tertiary-container text-on-tertiary-container',
+    text: 'text-console-red',
+    soft: 'bg-tertiary-container text-console-red',
     label: 'Overdue',
   },
   DUE_SOON: {
-    text: 'text-on-secondary-container',
-    soft: 'bg-secondary-container text-on-secondary-container',
+    text: 'text-console-peach-ink',
+    soft: 'bg-console-peach text-console-peach-ink',
     label: 'Due soon',
   },
   ON_TRACK: {
@@ -91,19 +91,31 @@ export const TARGET_TONE: Record<TargetState, { text: string; soft: string; labe
   },
 };
 
-function span(minutes: number): string {
-  const m = Math.abs(minutes);
-  if (m < 60) return `${m} min`;
+/** Compact duration, as the design writes it: "45m", "1h 15m", "3h", "2d". */
+export function span(minutes: number): string {
+  const m = Math.abs(Math.round(minutes));
+  if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60);
-  if (h < 48) return m % 60 && h < 10 ? `${h} h ${m % 60} min` : `${h} h`;
-  return `${Math.round(h / 24)} days`;
+  if (h >= 48) return `${Math.round(h / 24)}d`;
+  return m % 60 && h < 10 ? `${h}h ${m % 60}m` : `${h}h`;
 }
 
-/** "2 h 15 min left", "Overdue by 3 h". */
+/** "2h 15m left", "Overdue by 3h". */
 export function timeLeft(target: Target): string {
   return target.minutesLeft < 0
     ? `Overdue by ${span(target.minutesLeft)}`
     : `${span(target.minutesLeft)} left`;
+}
+
+export type PillTone = 'red' | 'darkred' | 'orange' | 'beige' | 'green' | 'cream' | 'pink';
+
+/** The target as the design's status pill: "Breached 3h", "High risk · 1h 15m left", "Due in 45m". */
+export function targetPill(target: Target): { tone: PillTone; text: string } {
+  if (target.state === 'OVERDUE')
+    return { tone: 'red', text: `Breached ${span(target.minutesLeft)}` };
+  if (target.state === 'DUE_SOON')
+    return { tone: 'orange', text: `High risk · ${span(target.minutesLeft)} left` };
+  return { tone: 'beige', text: `Due in ${span(target.minutesLeft)}` };
 }
 
 /** Which clock a target is on, in words for the panel. */

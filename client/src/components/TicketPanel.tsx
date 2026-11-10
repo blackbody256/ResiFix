@@ -175,7 +175,7 @@ export function TicketPanel({
                 {item.target && (
                   <p
                     className={cx(
-                      'mt-3 flex flex-wrap items-center gap-2 rounded-2xl px-3 py-2 text-sm',
+                      'mt-3 flex flex-wrap items-center gap-2 rounded-console px-3 py-2 text-sm',
                       TARGET_TONE[item.target.state].soft,
                     )}
                   >
@@ -324,7 +324,7 @@ function NextStep({
 
   return (
     <section className="space-y-3">
-      <div className="rounded-3xl bg-surface p-4 shadow-sm lg:border lg:border-outline-variant/60">
+      <div className="rounded-console bg-console-card p-4">
         <Eyebrow>Next step</Eyebrow>
         <p className="mt-1 text-lg font-bold">{primary.title}</p>
         <div className="mt-1 text-sm text-on-surface-variant">{primary.hint}</div>
@@ -332,7 +332,7 @@ function NextStep({
           <div className="mt-4">{forms[mode]}</div>
         ) : (
           primary.button && (
-            <Button className="mt-4" onClick={() => setMode(primary.mode)}>
+            <Button className="mt-4 rounded-console!" onClick={() => setMode(primary.mode)}>
               {primary.icon}
               {primary.button}
             </Button>
@@ -346,7 +346,7 @@ function NextStep({
               key={m.label}
               type="button"
               onClick={() => setMode(m.mode)}
-              className="rounded-full border border-outline-variant bg-surface px-3.5 py-2 text-sm font-semibold hover:bg-surface-variant"
+              className="rounded-console border border-outline-variant bg-console-card px-3.5 py-2 text-sm font-semibold text-console-ink hover:bg-surface"
             >
               {m.label}
             </button>
@@ -362,7 +362,7 @@ function ChangeRequest({ visit }: { visit: NonNullable<QueueItem['nextVisit']> }
   return (
     <span className="block">
       Booked for {when(visit.scheduledAt)}. They wrote:
-      <span className="mt-1 block rounded-2xl bg-surface-variant/60 px-3 py-2 italic text-on-surface">
+      <span className="mt-1 block rounded-console bg-surface-variant/60 px-3 py-2 italic text-on-surface">
         “{visit.changeRequest.message}”
       </span>
     </span>
@@ -407,10 +407,16 @@ function Actions({
 }) {
   return (
     <div className="flex gap-2">
-      <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
+      <Button
+        type="button"
+        variant="outline"
+        className="rounded-console!"
+        onClick={onCancel}
+        disabled={busy}
+      >
         Cancel
       </Button>
-      <Button type="submit" disabled={busy}>
+      <Button type="submit" className="rounded-console!" disabled={busy}>
         {busy ? 'Saving…' : label}
       </Button>
     </div>
@@ -418,7 +424,7 @@ function Actions({
 }
 
 const SELECT =
-  'w-full rounded-2xl border border-outline-variant bg-surface px-4 py-3 text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/25';
+  'w-full rounded-console border border-outline-variant bg-console-card px-4 py-3 text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/25';
 
 function Field({
   label,
@@ -512,6 +518,7 @@ function ReviewForm({ item, onCancel, onApplied }: FormProps) {
       </Field>
       <Field label="What you found (optional, kept with the report)" htmlFor="note">
         <Textarea
+          className="rounded-console!"
           id="note"
           rows={2}
           maxLength={500}
@@ -609,6 +616,7 @@ function ScheduleForm({
     >
       <Field label="When" htmlFor="at">
         <Input
+          className="rounded-console!"
           id="at"
           type="datetime-local"
           required
@@ -643,6 +651,7 @@ function ScheduleForm({
       </Field>
       <Field label="Note for the resident (optional)" htmlFor="visit-notes">
         <Input
+          className="rounded-console!"
           id="visit-notes"
           maxLength={300}
           placeholder="e.g. Please leave the bathroom clear"
@@ -686,6 +695,7 @@ function MoveForm({
       )}
       <Field label="New time" htmlFor="move-at">
         <Input
+          className="rounded-console!"
           id="move-at"
           type="datetime-local"
           required
@@ -722,7 +732,7 @@ function MissedForm({ item, visitId, onCancel, onApplied }: FormProps & { visitI
           This visit is booked for {when(visit.scheduledAt)}. You can record it as missed once that
           time has come; to change it now, move it instead.
         </Notice>
-        <Button variant="outline" onClick={onCancel}>
+        <Button variant="outline" className="rounded-console!" onClick={onCancel}>
           Back
         </Button>
       </div>
@@ -749,7 +759,7 @@ function MissedForm({ item, visitId, onCancel, onApplied }: FormProps & { visitI
           <label
             key={r.value}
             className={cx(
-              'flex cursor-pointer items-center gap-3 rounded-2xl border px-3 py-2.5 text-sm',
+              'flex cursor-pointer items-center gap-3 rounded-console border px-3 py-2.5 text-sm',
               reason === r.value
                 ? 'border-primary bg-primary-container/50'
                 : 'border-outline-variant bg-surface',
@@ -776,6 +786,7 @@ function MissedForm({ item, visitId, onCancel, onApplied }: FormProps & { visitI
         htmlFor="missed-notes"
       >
         <Textarea
+          className="rounded-console!"
           id="missed-notes"
           rows={2}
           maxLength={300}
@@ -822,7 +833,7 @@ function StartForm({ item, onCancel, onApplied }: FormProps) {
 function Details({ item, detail }: { item: QueueItem; detail: Detail | null }) {
   const past = (detail?.visits ?? []).filter((v) => v.arrivedAt || v.missed);
   return (
-    <section className="space-y-3 rounded-3xl bg-surface p-4 shadow-sm lg:border lg:border-outline-variant/60">
+    <section className="space-y-3 rounded-console bg-console-card p-4">
       <Eyebrow>The report</Eyebrow>
       {item.description && <p className="whitespace-pre-line">{item.description}</p>}
       {detail?.photos.length ? (
@@ -833,7 +844,7 @@ function Details({ item, detail }: { item: QueueItem; detail: Detail | null }) {
                 src={p.url}
                 alt="Photo of the fault"
                 loading="lazy"
-                className="aspect-square w-full rounded-2xl object-cover"
+                className="aspect-square w-full rounded-console object-cover"
               />
             </a>
           ))}
@@ -852,7 +863,7 @@ function Details({ item, detail }: { item: QueueItem; detail: Detail | null }) {
         </div>
       </dl>
       {detail && (
-        <div className="flex items-center gap-3 rounded-2xl bg-surface-variant/50 px-3 py-2 text-sm">
+        <div className="flex items-center gap-3 rounded-console bg-surface-variant/50 px-3 py-2 text-sm">
           <UserIcon size={18} className="shrink-0 text-primary" />
           <span className="min-w-0 flex-1 truncate">
             Reported by <span className="font-semibold">{detail.reporter.name}</span>

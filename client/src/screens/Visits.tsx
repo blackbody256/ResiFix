@@ -87,7 +87,9 @@ export function Visits() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-extrabold">Visits</h1>
+        <h1 className="text-2xl font-extrabold text-console-ink">
+          Repair Progress &amp; Scheduling
+        </h1>
         <p className="text-sm text-on-surface-variant">
           Booked repair visits and work under way, what needs you first at the top.
         </p>
@@ -110,7 +112,7 @@ export function Visits() {
             <div>
               <h2 className="flex items-center gap-2 text-lg font-bold">
                 {g.title}
-                <span className="rounded-full bg-surface px-2 text-sm">{g.items.length}</span>
+                <span className="rounded-full bg-console-card px-2 text-sm">{g.items.length}</span>
               </h2>
               {g.hint && <p className="text-sm text-on-surface-variant">{g.hint}</p>}
             </div>

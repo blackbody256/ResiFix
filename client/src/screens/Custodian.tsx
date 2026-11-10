@@ -28,7 +28,7 @@ type ViewKey = (typeof VIEWS)[number]['key'];
 
 const PRIORITIES: Priority[] = ['URGENT', 'HIGH', 'MEDIUM', 'LOW'];
 const SELECT =
-  'w-full rounded-2xl border border-outline-variant bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/25';
+  'w-full rounded-console border border-outline-variant bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/25';
 
 interface Catalogue {
   categories: { id: string; name: string }[];
@@ -85,7 +85,7 @@ export function Custodian() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-extrabold">Work queue</h1>
+        <h1 className="text-2xl font-extrabold text-console-ink">Complaints &amp; Work Queue</h1>
         <p className="text-sm text-on-surface-variant">
           Open tickets in your property, the most pressing first.
         </p>
@@ -104,7 +104,7 @@ export function Custodian() {
                 'flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap transition-colors',
                 view === v.key
                   ? 'bg-primary text-on-primary shadow-sm'
-                  : 'bg-surface text-on-surface hover:bg-surface-variant',
+                  : 'bg-console-card text-console-nav hover:bg-surface',
               )}
             >
               {v.label}
@@ -217,7 +217,7 @@ function Filters({
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Search room, fault or ticket number"
-            className="py-2.5 pl-11"
+            className="rounded-console! bg-console-card py-2.5 pl-11"
           />
         </label>
         <button
@@ -225,7 +225,7 @@ function Filters({
           onClick={() => setShown((s) => !s)}
           aria-expanded={shown}
           className={cx(
-            'rounded-2xl border px-4 text-sm font-semibold',
+            'rounded-console border px-4 text-sm font-semibold',
             shown || active
               ? 'border-primary bg-primary-container text-on-primary-container'
               : 'border-outline-variant bg-surface',
@@ -235,7 +235,7 @@ function Filters({
         </button>
       </div>
       {shown && (
-        <div className="grid gap-2 rounded-3xl bg-surface p-3 shadow-sm sm:grid-cols-3">
+        <div className="grid gap-2 rounded-console bg-console-card p-3 sm:grid-cols-3">
           <select
             aria-label="Category"
             className={SELECT}
@@ -297,7 +297,7 @@ function Filters({
 /** Laptop table: four columns and one action. */
 function QueueTable({ items, onOpen }: { items: QueueItem[]; onOpen: (item: QueueItem) => void }) {
   return (
-    <div className="hidden overflow-hidden rounded-3xl bg-surface shadow-sm lg:block">
+    <div className="hidden overflow-hidden rounded-console bg-console-card lg:block">
       <table className="w-full text-left text-sm">
         <thead className="bg-surface-variant/60 text-xs font-bold tracking-wide text-on-surface-variant uppercase">
           <tr>
