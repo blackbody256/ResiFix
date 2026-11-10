@@ -1,5 +1,6 @@
 // OWNER: Ayan (student app home, PWA shell). Residents: greeting, report a fault, what needs
-// them now (repairs to confirm, the next visit) and their open tickets. Staff: shortcuts.
+// them now (repairs to confirm, the next visit) and their open tickets. Staff see the custodian
+// dashboard (screens/CustodianDashboard.tsx, OWNER: Andrew).
 import { Link } from 'react-router';
 import { useAuth } from '../auth/useAuth';
 import {
@@ -14,6 +15,7 @@ import {
 } from '../components/icons';
 import { CategoryTile, TicketCard } from '../components/tickets';
 import { Card, ErrorText, Eyebrow, Spinner, StatCard } from '../components/ui';
+import { CustodianDashboard } from './CustodianDashboard';
 import { isOpen, relative, ticketRef, when, type TicketSummary } from '../lib/tickets';
 import { useApi } from '../lib/useApi';
 
@@ -30,7 +32,11 @@ export function Home() {
   const { user } = useAuth();
   if (!user) return null;
   const first = user.name.split(/\s+/)[0];
-  return user.role === 'RESIDENT' ? <ResidentHome first={first} /> : <StaffHome first={first} />;
+  return user.role === 'RESIDENT' ? (
+    <ResidentHome first={first} />
+  ) : (
+    <CustodianDashboard first={first} />
+  );
 }
 
 function Hello({ first }: { first: string }) {
@@ -215,49 +221,6 @@ function ResidentHome({ first }: { first: string }) {
             </section>
           )}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function StaffHome({ first }: { first: string }) {
-  const tickets = useApi<{ tickets: TicketSummary[] }>('/tickets');
-  const all = tickets.data?.tickets ?? [];
-  const count = (pred: (t: TicketSummary) => boolean) => all.filter(pred).length;
-  const stats = [
-    { label: 'New reports', value: count((t) => t.status === 'REPORTED') },
-    { label: 'Open', value: count((t) => isOpen(t.status)) },
-    { label: 'Awaiting resident', value: count((t) => t.status === 'COMPLETED') },
-  ];
-  return (
-    <div className="space-y-5">
-      <Hello first={first} />
-      {tickets.error && <ErrorText>{tickets.error.message}</ErrorText>}
-      <div className="grid grid-cols-3 gap-3">
-        {stats.map((s) => (
-          <Card key={s.label} className="p-4 text-center">
-            <p className="text-2xl font-extrabold text-primary">{tickets.data ? s.value : '–'}</p>
-            <p className="text-xs font-semibold text-on-surface-variant">{s.label}</p>
-          </Card>
-        ))}
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Link
-          to="/custodian"
-          className="flex items-center gap-3 rounded-3xl bg-primary p-5 text-on-primary"
-        >
-          <WrenchIcon size={24} />
-          <span className="flex-1 font-bold">Work queue</span>
-          <ArrowRightIcon size={20} />
-        </Link>
-        <Link
-          to="/tickets"
-          className="flex items-center gap-3 rounded-3xl bg-surface p-5 shadow-sm"
-        >
-          <TicketIcon size={24} className="text-primary" />
-          <span className="flex-1 font-bold">All tickets</span>
-          <ArrowRightIcon size={20} />
-        </Link>
       </div>
     </div>
   );
