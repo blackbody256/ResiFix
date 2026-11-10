@@ -111,6 +111,7 @@ Everything runs without these. Fill them in `.env` when you need them:
 | `npm run start`                   | Run the built API                                           |
 | `npm run start:worker`            | Run the queue worker on its own (`RUN_WORKER_INLINE=false`) |
 | `npm run lint`                    | ESLint + Prettier check (`npm run format` fixes formatting) |
+| `npm run check:commits`           | Check your branch's commits for AI or co-author lines       |
 | `npm run typecheck`               | TypeScript for server and client                            |
 | `npm test`                        | Server unit + e2e tests (needs `infra:up`; see below)       |
 | `npm run infra:up` / `infra:down` | Start / stop Postgres, Redis and MinIO                      |

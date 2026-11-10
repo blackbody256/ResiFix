@@ -44,6 +44,7 @@ Branch from `main`, and rebase on `main` before opening a PR. Each branch covers
 
 - Every PR is reviewed and approved by **Ann or Andrew** before merge. Do not merge your own PR.
 - CI must pass: lint, typecheck, migrations, seed, the unit and e2e tests, both builds, the API smoke test and the Docker image builds.
+- **No AI or co-author lines in commits.** A separate check fails the PR if any commit has a `Co-authored-by:` line, a trailer or note crediting an AI tool (Claude, Copilot, Codex, ChatGPT, Cursor, ...), or an AI tool or bot as its author or committer. Run `npm run check:commits` before you push. To fix a commit, run `git rebase -i origin/main`, mark it `reword` (or `edit` to change the author), then `git push --force-with-lease`.
 - Put the backlog ID in the title: `PB-005: Resident can report a fault`.
 - In the description: what changed, how to test it, and screenshots for any UI change.
 
@@ -80,6 +81,7 @@ Log in with any seeded phone number. In development the OTP is always **123456**
 | Command                            | What it does                                                     |
 | ---------------------------------- | ---------------------------------------------------------------- |
 | `npm run lint` / `npm run format`  | ESLint + Prettier check / fix                                    |
+| `npm run check:commits`            | Your branch's commits have no AI or co-author lines              |
 | `npm run typecheck`                | TypeScript for server and client                                 |
 | `npm test`                         | Server unit + e2e tests (`test:unit` / `test:e2e` for one kind)  |
 | `npm run build`                    | Build the API (`server/dist`) and the PWA (`client/dist`)        |
