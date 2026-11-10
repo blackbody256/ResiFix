@@ -1,0 +1,30 @@
+name: Commit messages
+
+# Fails a pull request when any of its commits credits an AI tool or has a co-author line.
+# The rules are in .github/scripts/check-commits.mjs; run `npm run check:commits` locally.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  no-ai-or-co-authors:
+    name: No AI or co-author lines
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Check the commits in this pull request
+        run: node .github/scripts/check-commits.mjs "$BASE..$HEAD"
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}

@@ -34,6 +34,7 @@
     "db:reset": "prisma migrate reset --force",
     "studio": "prisma studio",
     "lint": "eslint . && prettier --check .",
+    "check:commits": "node .github/scripts/check-commits.mjs",
     "format": "prettier --write .",
     "postinstall": "prisma generate"
   },
