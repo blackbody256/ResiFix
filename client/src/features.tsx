@@ -1,9 +1,16 @@
 // One route per feature area. Add your screen here; keep one file per area under screens/.
 // `icon` + `nav` put it in the bottom tab bar (Home is always first, Account always last).
 import type { ReactElement } from 'react';
-import { PlusCircleIcon, TicketIcon, WrenchIcon, BuildingIcon } from './components/icons';
+import {
+  PlusCircleIcon,
+  TicketIcon,
+  WrenchIcon,
+  BuildingIcon,
+  ChartIcon,
+} from './components/icons';
 import type { Role } from './lib/session';
 import { Account } from './screens/Account';
+import { Analytics } from './screens/Analytics';
 import { Completion } from './screens/Completion';
 import { Custodian } from './screens/Custodian';
 import { Notifications } from './screens/Notifications';
@@ -50,6 +57,14 @@ export const features: Feature[] = [
     element: <Properties />,
     nav: true,
     icon: BuildingIcon,
+  },
+  {
+    path: '/analytics',
+    label: 'Analytics',
+    roles: ['ADMIN'],
+    element: <Analytics />,
+    nav: true,
+    icon: ChartIcon,
   },
   // OWNER: Ayan: PB-023. Opened from the bell in the top bar.
   { path: '/notifications', label: 'Updates', element: <Notifications /> },

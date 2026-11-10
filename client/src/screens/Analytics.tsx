@@ -1,0 +1,272 @@
+import { useState } from 'react';
+import {
+  BarElement,
+  CategoryScale,
+  Chart as ChartJS,
+  Legend,
+  LinearScale,
+  LineElement,
+  PointElement,
+  Tooltip,
+} from 'chart.js';
+import { Bar, Line } from 'react-chartjs-2';
+import { Card, ErrorText, Input, Spinner, StatCard } from '../components/ui';
+import { useApi } from '../lib/useApi';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Tooltip,
+  Legend,
+);
+
+interface Summary {
+  sampleSize: number;
+  averageMinutes: number | null;
+  medianMinutes: number | null;
+  withinTarget: number;
+  overdue: number;
+}
+
+interface StatsResponse {
+  range: { from: string | null; to: string | null };
+  totals: { reported: number; responded: number; completed: number };
+  response: Summary;
+  repair: Summary;
+  byPriority: {
+    priority: string;
+    reported: number;
+    responded: number;
+    completed: number;
+    averageResponseMinutes: number | null;
+    averageRepairMinutes: number | null;
+  }[];
+  daily: {
+    date: string;
+    reported: number;
+    responded: number;
+    completed: number;
+    averageResponseMinutes: number | null;
+    averageRepairMinutes: number | null;
+  }[];
+}
+
+const minutes = (value: number | null) => {
+  if (value === null) return '—';
+  if (value < 60) return `${value} min`;
+  return `${(value / 60).toFixed(value % 60 ? 1 : 0)} h`;
+};
+
+const queryDate = (value: string, endOfDay = false) =>
+  value ? `${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z` : '';
+
+export function Analytics() {
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [appliedRange, setAppliedRange] = useState({ from: '', to: '' });
+  const query = new URLSearchParams();
+  if (appliedRange.from) query.set('from', queryDate(appliedRange.from));
+  if (appliedRange.to) query.set('to', queryDate(appliedRange.to, true));
+  const path = `/completion/stats${query.size ? `?${query.toString()}` : ''}`;
+  const { data, error, loading } = useApi<StatsResponse>(path);
+  const rangeError = from && to && from > to ? 'Choose a start date before the end date.' : '';
+
+  const trendLabels = data?.daily.map((day) => day.date.slice(5)) ?? [];
+  const trendData = {
+    labels: trendLabels,
+    datasets: [
+      {
+        label: 'Reported',
+        data: data?.daily.map((day) => day.reported) ?? [],
+        borderColor: '#0f766e',
+        backgroundColor: '#0f766e',
+        tension: 0.3,
+      },
+      {
+        label: 'Completed',
+        data: data?.daily.map((day) => day.completed) ?? [],
+        borderColor: '#d97706',
+        backgroundColor: '#d97706',
+        tension: 0.3,
+      },
+    ],
+  };
+  const priorityData = {
+    labels: data?.byPriority.map((item) => item.priority) ?? [],
+    datasets: [
+      {
+        label: 'Average response (minutes)',
+        data: data?.byPriority.map((item) => item.averageResponseMinutes) ?? [],
+        backgroundColor: '#0f766e',
+      },
+      {
+        label: 'Average repair (minutes)',
+        data: data?.byPriority.map((item) => item.averageRepairMinutes) ?? [],
+        backgroundColor: '#d97706',
+      },
+    ],
+  };
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-3xl font-extrabold text-primary">Response and repair performance</h1>
+        <p className="mt-1 text-on-surface-variant">
+          Track how quickly faults are answered and resolved.
+        </p>
+      </div>
+
+      <Card as="div">
+        <form
+          className="grid gap-4 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!rangeError) setAppliedRange({ from, to });
+          }}
+        >
+          <label className="text-sm font-semibold">
+            From
+            <Input
+              type="date"
+              value={from}
+              onChange={(event) => setFrom(event.target.value)}
+              className="mt-1"
+            />
+          </label>
+          <label className="text-sm font-semibold">
+            To
+            <Input
+              type="date"
+              value={to}
+              onChange={(event) => setTo(event.target.value)}
+              className="mt-1"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={Boolean(rangeError) || loading}
+            className="rounded-2xl bg-primary px-4 py-3 font-semibold text-on-primary hover:bg-brand-600 disabled:opacity-60"
+          >
+            Apply range
+          </button>
+          <button
+            type="button"
+            className="rounded-2xl border border-outline-variant px-4 py-3 font-semibold text-primary hover:bg-surface-variant"
+            onClick={() => {
+              setFrom('');
+              setTo('');
+              setAppliedRange({ from: '', to: '' });
+            }}
+          >
+            Reset range
+          </button>
+        </form>
+        {rangeError && <p className="mt-2 text-sm font-medium text-error">{rangeError}</p>}
+      </Card>
+
+      {loading && <Spinner label="Loading performance data…" />}
+      <ErrorText>{error?.message}</ErrorText>
+
+      {data && (
+        <>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <StatCard label="Reported" value={data.totals.reported} hint="Tickets in range" />
+            <StatCard
+              label="Avg response"
+              value={minutes(data.response.averageMinutes)}
+              hint={`${data.response.withinTarget} within target`}
+              tone={data.response.overdue ? 'alert' : 'good'}
+            />
+            <StatCard
+              label="Avg repair"
+              value={minutes(data.repair.averageMinutes)}
+              hint={`${data.repair.withinTarget} within target`}
+              tone={data.repair.overdue ? 'alert' : 'good'}
+            />
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-2">
+            <Card>
+              <h2 className="mb-4 text-lg font-bold">Ticket volume</h2>
+              <div className="relative h-64">
+                <Line
+                  data={trendData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                      x: { title: { display: true, text: 'Date' } },
+                      y: { beginAtZero: true, title: { display: true, text: 'Tickets' } },
+                    },
+                  }}
+                />
+              </div>
+            </Card>
+            <Card>
+              <h2 className="mb-4 text-lg font-bold">Time by priority</h2>
+              <div className="relative h-64">
+                <Bar
+                  data={priorityData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                      x: { title: { display: true, text: 'Priority' } },
+                      y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Average time (minutes)' },
+                      },
+                    },
+                  }}
+                />
+              </div>
+            </Card>
+          </div>
+
+          <Card>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-bold">Target performance</h2>
+              <span className="text-sm text-on-surface-variant">
+                {data.response.overdue + data.repair.overdue} overdue measurements
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-140 text-left text-sm">
+                <thead className="border-b border-outline-variant text-xs tracking-wide text-on-surface-variant uppercase">
+                  <tr>
+                    <th className="pb-2">Priority</th>
+                    <th className="pb-2">Reported</th>
+                    <th className="pb-2">Responded</th>
+                    <th className="pb-2">Completed</th>
+                    <th className="pb-2">Avg response</th>
+                    <th className="pb-2">Avg repair</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.byPriority.map((item) => (
+                    <tr
+                      key={item.priority}
+                      className="border-b border-outline-variant/50 last:border-0"
+                    >
+                      <td className="py-3 font-semibold">{item.priority}</td>
+                      <td className="py-3">{item.reported}</td>
+                      <td className="py-3">{item.responded}</td>
+                      <td className="py-3">{item.completed}</td>
+                      <td className="py-3">{minutes(item.averageResponseMinutes)}</td>
+                      <td className="py-3">{minutes(item.averageRepairMinutes)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
