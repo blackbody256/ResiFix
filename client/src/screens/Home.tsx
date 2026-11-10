@@ -32,11 +32,7 @@ export function Home() {
   const { user } = useAuth();
   if (!user) return null;
   const first = user.name.split(/\s+/)[0];
-  return user.role === 'RESIDENT' ? (
-    <ResidentHome first={first} />
-  ) : (
-    <CustodianDashboard first={first} />
-  );
+  return user.role === 'RESIDENT' ? <ResidentHome first={first} /> : <CustodianDashboard />;
 }
 
 function Hello({ first }: { first: string }) {
