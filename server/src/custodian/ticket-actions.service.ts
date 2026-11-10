@@ -92,6 +92,15 @@ export class TicketActionsService {
     return ticket;
   }
 
+  /** PB-013: the active custodians of the caller's property, for the assign and visit pickers. */
+  staff(scope: PropertyScope) {
+    return this.prisma.user.findMany({
+      where: scope.where<Prisma.UserWhereInput>({ role: Role.CUSTODIAN, isActive: true }),
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   /** An active custodian of the caller's property, or a 400 field error. */
   async custodian(userId: string, scope: PropertyScope, field: string) {
     const custodian = await this.prisma.user.findFirst({
