@@ -11,9 +11,19 @@
 //   [ ] PB-028  missed visits and ratings analytics
 //   [ ] PB-029  manage categories and response targets
 // The rating endpoint below is PB-022 (Ayan).
-import { Controller, Param, Post, UploadedFile, UseInterceptors, Body } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
+import { z } from 'zod';
 import { notImplemented } from '../common/app-exception';
 import { CurrentUser, Roles, Scope } from '../common/decorators';
 import type { PropertyScope } from '../common/property-scope';
@@ -21,9 +31,24 @@ import type { AuthUser } from '../auth/auth-user';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { CompletionService, RepairProofBody } from './completion.service';
 
+const StatsQuery = z.object({
+  from: z.iso.datetime({ offset: true }).optional(),
+  to: z.iso.datetime({ offset: true }).optional(),
+});
+type StatsQuery = z.infer<typeof StatsQuery>;
+
 @Controller('completion')
 export class CompletionController {
   constructor(private readonly completion: CompletionService) {}
+
+  @Get('stats')
+  @Roles(Role.ADMIN)
+  stats(
+    @Query(new ZodValidationPipe(StatsQuery)) query: StatsQuery,
+    @Scope() scope: PropertyScope,
+  ) {
+    return this.completion.stats(query, scope);
+  }
 
   @Post('tickets/:id/repair-proof')
   @Roles(Role.CUSTODIAN, Role.ADMIN)

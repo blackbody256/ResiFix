@@ -141,6 +141,12 @@ export const BuildingIcon = make(
     <path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3" />
   </>,
 );
+export const ChartIcon = make(
+  <>
+    <path d="M4 19V5M4 19h16" />
+    <path d="m7 15 3-4 3 2 4-6" />
+  </>,
+);
 export const StarIcon = make(
   <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z" />,
 );
