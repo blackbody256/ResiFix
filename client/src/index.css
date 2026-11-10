@@ -49,6 +49,30 @@
   --color-brand-500: #3f7a3b;
   --color-brand-600: #3a6f36;
   --color-brand-700: #2f5d2c;
+
+  /* Custodian console (Group J warden pages; OWNER: Andrew). Measured from the design: the
+     tokens above cover the page, sidebar and pill colours; these are the extra ones. */
+  --color-console-card: #ffffff;
+  --color-console-ink: #1a2132; /* headings, big numbers */
+  --color-console-body: #4c554d; /* ticket titles */
+  --color-console-nav: #414a43; /* sidebar items */
+  --color-console-muted: #6f7970; /* small uppercase labels */
+  --color-console-faint: #808a81; /* secondary lines */
+  --color-console-line: #ede8db; /* timeline */
+  --color-console-green: #005f3d; /* progress bars */
+  --color-console-green-tile: #1a794e; /* card header tiles */
+  --color-console-green-ink: #166947;
+  --color-console-mint: #e7f2ed; /* "new complaints" icon tile */
+  --color-console-red: #9d262a; /* breached label, number, pill */
+  --color-console-red-text: #a33034; /* banner title */
+  --color-console-peach: #ffdbc2;
+  --color-console-peach-ink: #6e3c00;
+  --color-console-orange: #ffb67c; /* "high risk" pill */
+  --color-console-orange-ink: #331c00;
+  --color-console-amber: #7e4500; /* category line on urgent tickets */
+  --color-console-slate: #525f73;
+
+  --radius-console: 0.5rem; /* cards and rows: square-ish, not the student app's 24px */
 }
 
 @layer base {

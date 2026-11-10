@@ -2,10 +2,11 @@
 // `icon` + `nav` put it in the bottom tab bar (Home is always first, Account always last).
 import type { ReactElement } from 'react';
 import {
+  BuildingIcon,
+  CalendarIcon,
   PlusCircleIcon,
   TicketIcon,
   WrenchIcon,
-  BuildingIcon,
   ChartIcon,
 } from './components/icons';
 import type { Role } from './lib/session';
@@ -17,6 +18,7 @@ import { Notifications } from './screens/Notifications';
 import { Properties } from './screens/Properties';
 import { Reporting } from './screens/Reporting';
 import { Tickets } from './screens/Tickets';
+import { Visits } from './screens/Visits';
 
 export interface Feature {
   path: string;
@@ -46,6 +48,15 @@ export const features: Feature[] = [
     element: <Custodian />,
     nav: true,
     icon: WrenchIcon,
+  },
+  // OWNER: Andrew: PB-015..PB-018. Booked visits and work under way.
+  {
+    path: '/visits',
+    label: 'Visits',
+    roles: ['CUSTODIAN', 'ADMIN'],
+    element: <Visits />,
+    nav: true,
+    icon: CalendarIcon,
   },
   // OWNER: Ayan: PB-010, PB-011, PB-020, PB-022, PB-023
   { path: '/tickets', label: 'Tickets', element: <Tickets />, nav: true, icon: TicketIcon },

@@ -47,6 +47,12 @@ export class CustodianController {
     return { targets: await this.targets.list(scope) };
   }
 
+  /** PB-013: who a ticket or visit can go to. GET /api/custodian/staff */
+  @Get('staff')
+  async listStaff(@Scope() scope: PropertyScope) {
+    return { staff: await this.actions.staff(scope) };
+  }
+
   /**
    * PB-013: open tickets, most pressing first. GET /api/custodian/queue
    * ?status=&priority=&state=&categoryId=&blockId=&assignee=me|unassigned|<id>&q=&limit=
