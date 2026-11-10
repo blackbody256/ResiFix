@@ -10,6 +10,7 @@ import {
   destroyProperty,
   HOUR,
   type PropertyFixture,
+  uniquePhone,
 } from './fixtures';
 
 const S = TicketStatus;
@@ -228,6 +229,33 @@ describe('PB-013 work queue', () => {
       expect(ids((await queue('', away.custodian)).tickets)).not.toContain(overdue.id);
       expect(ids((await queue('', home.admin)).tickets)).toHaveLength(4);
       await t.as(home.residents[0]).get('/custodian/queue').expect(403);
+    });
+  });
+
+  describe('GET /custodian/staff', () => {
+    it("lists the property's active custodians, for the pickers", async () => {
+      const res = await t.as(home.admin).get('/custodian/staff').expect(200);
+      expect(res.body.staff.map((s: { id: string }) => s.id).sort()).toEqual(
+        [home.custodian.id, home.custodian2.id].sort(),
+      );
+      expect(Object.keys(res.body.staff[0]).sort()).toEqual(['id', 'name']);
+    });
+
+    it('leaves out other properties, residents, admins and inactive custodians', async () => {
+      const gone = await t.prisma.user.create({
+        data: {
+          propertyId: away.property.id,
+          phone: uniquePhone(),
+          name: 'Former custodian',
+          role: 'CUSTODIAN',
+          isActive: false,
+        },
+      });
+      const res = await t.as(away.custodian).get('/custodian/staff').expect(200);
+      const ids = res.body.staff.map((s: { id: string }) => s.id);
+      expect(ids.sort()).toEqual([away.custodian.id, away.custodian2.id].sort());
+      expect(ids).not.toContain(gone.id);
+      await t.as(home.residents[0]).get('/custodian/staff').expect(403);
     });
   });
 

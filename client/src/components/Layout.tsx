@@ -1,41 +1,12 @@
 // App shell (PWA): top bar with the notification bell and account avatar, page content, and a
 // bottom tab bar on every screen size, as in the Group J design.
-import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth/useAuth';
 import { features } from '../features';
-import { api } from '../lib/api';
 import { cx } from '../lib/cx';
+import { initials, useUnread } from '../lib/shell';
+import { ConsoleLayout } from './ConsoleLayout';
 import { BellIcon, HomeIcon, LogOutIcon, UserIcon, WrenchIcon } from './icons';
-
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]!.toUpperCase())
-    .join('');
-
-/** Unread count for the bell; refreshed on every navigation and when the tab regains focus. */
-function useUnread() {
-  const { pathname } = useLocation();
-  const [unread, setUnread] = useState(0);
-  useEffect(() => {
-    let cancelled = false;
-    const load = () =>
-      api
-        .get<{ unread?: number }>('/notifications')
-        .then((r) => !cancelled && setUnread(r.unread ?? 0))
-        .catch(() => undefined);
-    void load();
-    window.addEventListener('focus', load);
-    return () => {
-      cancelled = true;
-      window.removeEventListener('focus', load);
-    };
-  }, [pathname]);
-  return unread;
-}
 
 const ROLE_LABEL: Record<string, string> = {
   RESIDENT: 'Resident',
@@ -49,6 +20,8 @@ export function Layout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   if (!user) return null;
+  // Custodians and admins: the operations console shell (ConsoleLayout, OWNER: Andrew).
+  if (user.role !== 'RESIDENT') return <ConsoleLayout />;
 
   const tabs = [
     { path: '/', label: 'Home', icon: HomeIcon, end: true },
