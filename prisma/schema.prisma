@@ -269,8 +269,8 @@ model Ticket {
   closedAt    DateTime?
 
   property  Property  @relation(fields: [propertyId], references: [id])
-  room      Room?     @relation(fields: [roomId], references: [id])
-  facility  Facility? @relation(fields: [facilityId], references: [id])
+  room      Room?     @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  facility  Facility? @relation(fields: [facilityId], references: [id], onDelete: Restrict)
   reporter  User      @relation("TicketReporter", fields: [reporterId], references: [id])
   assignee  User?     @relation("TicketAssignee", fields: [assigneeId], references: [id])
   faultItem FaultItem @relation(fields: [faultItemId], references: [id])
