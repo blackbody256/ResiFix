@@ -63,6 +63,15 @@ export class CompletionController {
     return this.completion.recurringFaults(query, scope);
   }
 
+  @Get('missed-visits-ratings')
+  @Roles(Role.ADMIN)
+  missedVisitsRatings(
+    @Query(new ZodValidationPipe(StatsQuery)) query: StatsQuery,
+    @Scope() scope: PropertyScope,
+  ) {
+    return this.completion.missedVisitsRatings(query, scope);
+  }
+
   @Post('tickets/:id/repair-proof')
   @Roles(Role.CUSTODIAN, Role.ADMIN)
   @UseInterceptors(FileInterceptor('photo', { limits: { fileSize: 5 * 1024 * 1024, files: 1 } }))
