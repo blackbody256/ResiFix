@@ -81,6 +81,15 @@ interface RecurringFaultResponse {
   byRoomFault: RoomFaultCount[];
 }
 
+interface MissedRatingsResponse {
+  missedVisits: { total: number; byReason: { reason: string; count: number }[] };
+  ratings: {
+    total: number;
+    averageScore: number | null;
+    distribution: { score: number; count: number }[];
+  };
+}
+
 const minutes = (value: number | null) => {
   if (value === null) return '—';
   if (value < 60) return `${value} min`;
@@ -105,6 +114,12 @@ export function Analytics() {
     error: recurringError,
     loading: recurringLoading,
   } = useApi<RecurringFaultResponse>(recurringPath);
+  const completionPath = `/completion/missed-visits-ratings${query.size ? `?${query.toString()}` : ''}`;
+  const {
+    data: completion,
+    error: completionError,
+    loading: completionLoading,
+  } = useApi<MissedRatingsResponse>(completionPath);
   const rangeError = from && to && from > to ? 'Choose a start date before the end date.' : '';
 
   const trendLabels = data?.daily.map((day) => day.date.slice(5)) ?? [];
@@ -151,6 +166,26 @@ export function Analytics() {
       {
         label: 'Reports',
         data: recurring?.byItem.slice(0, 8).map((item) => item.reports) ?? [],
+        backgroundColor: '#0f766e',
+      },
+    ],
+  };
+  const missedVisitsData = {
+    labels: completion?.missedVisits.byReason.map((item) => item.reason.replaceAll('_', ' ')) ?? [],
+    datasets: [
+      {
+        label: 'Missed visits',
+        data: completion?.missedVisits.byReason.map((item) => item.count) ?? [],
+        backgroundColor: '#d97706',
+      },
+    ],
+  };
+  const ratingsData = {
+    labels: completion?.ratings.distribution.map((item) => `${item.score} stars`) ?? [],
+    datasets: [
+      {
+        label: 'Ratings',
+        data: completion?.ratings.distribution.map((item) => item.count) ?? [],
         backgroundColor: '#0f766e',
       },
     ],
@@ -217,6 +252,8 @@ export function Analytics() {
       <ErrorText>{error?.message}</ErrorText>
       {recurringLoading && <Spinner label="Loading recurring-fault data…" />}
       <ErrorText>{recurringError?.message}</ErrorText>
+      {completionLoading && <Spinner label="Loading missed-visit and rating data…" />}
+      <ErrorText>{completionError?.message}</ErrorText>
 
       {data && (
         <>
@@ -319,6 +356,69 @@ export function Analytics() {
               </table>
             </div>
           </Card>
+
+          {completion && (
+            <Card>
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold">Missed visits and ratings</h2>
+                  <p className="text-sm text-on-surface-variant">
+                    Understand why visits fail and how residents rate completed repairs.
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-extrabold text-primary">
+                    {completion.ratings.averageScore ?? '—'}
+                  </p>
+                  <p className="text-xs text-on-surface-variant">average rating / 5</p>
+                </div>
+              </div>
+              <div className="grid gap-5 lg:grid-cols-2">
+                <div>
+                  <h3 className="mb-3 text-sm font-bold text-on-surface-variant">
+                    Missed visits by reason
+                  </h3>
+                  <div className="relative h-56">
+                    <Bar
+                      data={missedVisitsData}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        scales: {
+                          x: { title: { display: true, text: 'Reason' } },
+                          y: { beginAtZero: true, title: { display: true, text: 'Visits' } },
+                        },
+                      }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <h3 className="mb-3 text-sm font-bold text-on-surface-variant">
+                    Ratings by score
+                  </h3>
+                  <div className="relative h-56">
+                    <Bar
+                      data={ratingsData}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        scales: {
+                          x: { title: { display: true, text: 'Score' } },
+                          y: { beginAtZero: true, title: { display: true, text: 'Ratings' } },
+                        },
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+              <p className="mt-3 text-xs text-on-surface-variant">
+                {completion.missedVisits.total} missed visits · {completion.ratings.total} ratings
+                in this range
+              </p>
+            </Card>
+          )}
 
           {recurring && (
             <Card>
