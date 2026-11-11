@@ -10,7 +10,7 @@
 //   [ ] PB-027  recurring-fault analytics
 //   [ ] PB-028  missed visits and ratings analytics
 //   [ ] PB-029  manage categories and response targets
-// The rating endpoint below is PB-022 (Ayan).
+// [x] PB-022  rating endpoint below (Ayan): RatingService
 import {
   Body,
   Controller,
@@ -30,6 +30,7 @@ import type { PropertyScope } from '../common/property-scope';
 import type { AuthUser } from '../auth/auth-user';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { CompletionService, RepairProofBody } from './completion.service';
+import { RatingBody, RatingService } from './rating.service';
 
 const StatsQuery = z.object({
   from: z.iso.datetime({ offset: true }).optional(),
@@ -39,7 +40,10 @@ type StatsQuery = z.infer<typeof StatsQuery>;
 
 @Controller('completion')
 export class CompletionController {
-  constructor(private readonly completion: CompletionService) {}
+  constructor(
+    private readonly completion: CompletionService,
+    private readonly ratings: RatingService,
+  ) {}
 
   @Get('stats')
   @Roles(Role.ADMIN)
@@ -78,9 +82,15 @@ export class CompletionController {
     notImplemented('PB-020');
   }
 
+  /** PB-022 (Ayan): POST /api/completion/tickets/:id/rating { score, comment? } -> { rating } */
   @Post('tickets/:id/rating')
   @Roles(Role.RESIDENT)
-  rate() {
-    notImplemented('PB-022');
+  rate(
+    @Param('id') ticketId: string,
+    @Body(new ZodValidationPipe(RatingBody)) body: RatingBody,
+    @CurrentUser() user: AuthUser,
+    @Scope() scope: PropertyScope,
+  ) {
+    return this.ratings.rate(ticketId, body, user, scope);
   }
 }
