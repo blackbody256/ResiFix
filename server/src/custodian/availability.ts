@@ -36,8 +36,6 @@ export function isAvailableAt(date: Date, windows: AvailabilityWindow[]): boolea
   const minute = kampalaMinute(date);
   return windows.some(
     (window) =>
-      window.weekday === weekday &&
-      window.startMinute <= minute &&
-      minute < window.endMinute,
+      window.weekday === weekday && window.startMinute <= minute && minute < window.endMinute,
   );
 }

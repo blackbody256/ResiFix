@@ -92,6 +92,11 @@ export class ResidentUpdatesService {
           }),
         ),
     );
-    return [ticket.reporter.id, ...followers.filter((follower) => follower.linkedBy.isActive).map((follower) => follower.linkedBy.id)];
+    return [
+      ticket.reporter.id,
+      ...followers
+        .filter((follower) => follower.linkedBy.isActive)
+        .map((follower) => follower.linkedBy.id),
+    ];
   }
 }

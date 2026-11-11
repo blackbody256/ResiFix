@@ -12,6 +12,8 @@ export type TicketWithContext = Prisma.TicketGetPayload<{ include: typeof TICKET
 
 /** "Leaking tap, Block A 101" */
 export function describeTicket(t: TicketWithContext): string {
-  const location = t.room ? `${t.room.block.name} ${t.room.number}` : t.facility?.location ?? t.facility?.name ?? 'shared facility';
+  const location = t.room
+    ? `${t.room.block.name} ${t.room.number}`
+    : (t.facility?.location ?? t.facility?.name ?? 'shared facility');
   return `${t.faultItem.name}, ${location}`;
 }

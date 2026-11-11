@@ -24,7 +24,9 @@ const CreateFacilityBody = z.object({
   name: z.string().trim().min(1).max(100),
   location: z.string().trim().max(200).optional(),
 });
-const UpdateFacilityBody = CreateFacilityBody.partial().extend({ isActive: z.boolean().optional() });
+const UpdateFacilityBody = CreateFacilityBody.partial().extend({
+  isActive: z.boolean().optional(),
+});
 
 @Controller('properties')
 export class PropertiesController {

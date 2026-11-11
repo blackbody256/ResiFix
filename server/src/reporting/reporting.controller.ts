@@ -8,7 +8,19 @@
 //               per ticket and on-device compression in the UI (Ayan)
 //   [ ] PB-008  provide availability for scheduling (UI by Ayan)
 //   [ ] PB-009  follow a shared fault instead of reporting a duplicate
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Logger,
+  Param,
+  Post,
+  Put,
+  Query,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Prisma, PhotoKind, Role, TicketStatus, Weekday } from '@prisma/client';
 import { z } from 'zod';
@@ -17,6 +29,8 @@ import { CurrentUser, Roles, Scope } from '../common/decorators';
 import type { PropertyScope } from '../common/property-scope';
 import type { AuthUser } from '../auth/auth-user';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { ResponseTargetsService } from '../custodian/response-targets.service';
+import { CustodianAlertsService } from '../notifications/custodian-alerts.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -28,54 +42,70 @@ const PHOTO_TYPES: Record<string, string> = {
   'image/png': 'png',
   'image/webp': 'webp',
 };
-const CreateTicketBody = z.object({
-  roomId: z.string().trim().min(1).optional(),
-  facilityId: z.string().trim().min(1).optional(),
-  faultItemId: z.string().trim().min(1),
-  description: z.string().trim().max(2000).optional(),
-}).refine((b) => Boolean(b.roomId) !== Boolean(b.facilityId), {
-  message: 'Provide exactly one of roomId or facilityId',
-});
-const AvailabilityWindow = z.object({
-  weekday: z.nativeEnum(Weekday),
-  startMinute: z.number().int().min(0).max(1439),
-  endMinute: z.number().int().min(1).max(1440),
-}).refine((w) => w.startMinute < w.endMinute, { message: 'startMinute must be before endMinute' });
-const AvailabilityBody = z.object({ windows: z.array(AvailabilityWindow).max(28) }).superRefine((body, context) => {
-  const counts = new Map<Weekday, number>();
-  for (const window of body.windows) {
-    const count = (counts.get(window.weekday) ?? 0) + 1;
-    counts.set(window.weekday, count);
-    if (count > 4) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['windows'],
-        message: 'A day can have at most four availability windows',
-      });
-      break;
+const CreateTicketBody = z
+  .object({
+    roomId: z.string().trim().min(1).optional(),
+    facilityId: z.string().trim().min(1).optional(),
+    faultItemId: z.string().trim().min(1),
+    description: z.string().trim().max(2000).optional(),
+  })
+  .refine((b) => Boolean(b.roomId) !== Boolean(b.facilityId), {
+    message: 'Provide exactly one of roomId or facilityId',
+  });
+const AvailabilityWindow = z
+  .object({
+    weekday: z.nativeEnum(Weekday),
+    startMinute: z.number().int().min(0).max(1439),
+    endMinute: z.number().int().min(1).max(1440),
+  })
+  .refine((w) => w.startMinute < w.endMinute, { message: 'startMinute must be before endMinute' });
+const AvailabilityBody = z
+  .object({ windows: z.array(AvailabilityWindow).max(28) })
+  .superRefine((body, context) => {
+    const counts = new Map<Weekday, number>();
+    for (const window of body.windows) {
+      const count = (counts.get(window.weekday) ?? 0) + 1;
+      counts.set(window.weekday, count);
+      if (count > 4) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['windows'],
+          message: 'A day can have at most four availability windows',
+        });
+        break;
+      }
     }
-  }
-});
-const CandidateQuery = z.object({
-  faultItemId: z.string().min(1),
-  roomId: z.string().min(1).optional(),
-  facilityId: z.string().min(1).optional(),
-}).refine((q) => Boolean(q.roomId) !== Boolean(q.facilityId), {
-  message: 'Provide exactly one of roomId or facilityId',
-});
+  });
+const CandidateQuery = z
+  .object({
+    faultItemId: z.string().min(1),
+    roomId: z.string().min(1).optional(),
+    facilityId: z.string().min(1).optional(),
+  })
+  .refine((q) => Boolean(q.roomId) !== Boolean(q.facilityId), {
+    message: 'Provide exactly one of roomId or facilityId',
+  });
 const AvailabilityQuery = z.object({ userId: z.string().min(1).optional() });
 const DUPLICATE_STATUSES: TicketStatus[] = [
-  TicketStatus.REPORTED, TicketStatus.REVIEWED, TicketStatus.SCHEDULED,
-  TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS, TicketStatus.REOPENED,
+  TicketStatus.REPORTED,
+  TicketStatus.REVIEWED,
+  TicketStatus.SCHEDULED,
+  TicketStatus.ASSIGNED,
+  TicketStatus.IN_PROGRESS,
+  TicketStatus.REOPENED,
 ];
 
 @Controller('reporting')
 export class ReportingController {
+  private readonly logger = new Logger(ReportingController.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly notifications: NotificationsService,
     private readonly audit: AuditService,
+    private readonly targets: ResponseTargetsService,
+    private readonly alerts: CustodianAlertsService,
   ) {}
 
   /** Fault catalogue for the caller's property. GET /api/reporting/fault-categories */
@@ -97,17 +127,21 @@ export class ReportingController {
     @Scope() scope: PropertyScope,
   ) {
     const [occupancy, facility, faultItem] = await Promise.all([
-      body.roomId ? this.prisma.occupancy.findFirst({
-        where: {
-          userId: user.id,
-          roomId: body.roomId,
-          endDate: null,
-          room: { block: { propertyId: scope.propertyId } },
-        },
-      }) : null,
-      body.facilityId ? this.prisma.facility.findFirst({
-        where: { id: body.facilityId, propertyId: scope.propertyId, isActive: true },
-      }) : null,
+      body.roomId
+        ? this.prisma.occupancy.findFirst({
+            where: {
+              userId: user.id,
+              roomId: body.roomId,
+              endDate: null,
+              room: { block: { propertyId: scope.propertyId } },
+            },
+          })
+        : null,
+      body.facilityId
+        ? this.prisma.facility.findFirst({
+            where: { id: body.facilityId, propertyId: scope.propertyId, isActive: true },
+          })
+        : null,
       this.prisma.faultItem.findFirst({
         where: scope.where<Prisma.FaultItemWhereInput>({ id: body.faultItemId }, 'category'),
       }),
@@ -127,7 +161,26 @@ export class ReportingController {
       }),
       include: { room: { include: { block: true } }, facility: true, faultItem: true },
     });
-    return { ticket };
+    return { ticket: { ...ticket, dueAt: await this.afterReport(ticket.id) } };
+  }
+
+  /**
+   * Start response tracking and notify custodians after the ticket is persisted.
+   * These follow-up failures are logged without making the successful report look failed.
+   */
+  private async afterReport(ticketId: string): Promise<Date | null> {
+    let dueAt: Date | null = null;
+    try {
+      dueAt = await this.targets.startClock(ticketId);
+    } catch (error) {
+      this.logger.error(`Could not start response clock for ticket ${ticketId}`, error);
+    }
+    try {
+      await this.alerts.ticketReported(ticketId);
+    } catch (error) {
+      this.logger.error(`Could not alert custodians about ticket ${ticketId}`, error);
+    }
+    return dueAt;
   }
 
   @Get('availability')
@@ -137,7 +190,8 @@ export class ReportingController {
     @Query(new ZodValidationPipe(AvailabilityQuery)) query: z.infer<typeof AvailabilityQuery>,
   ) {
     const targetUserId = query.userId ?? user.id;
-    if (targetUserId !== user.id && user.role !== Role.ADMIN) throw notFound('Availability not found');
+    if (targetUserId !== user.id && user.role !== Role.ADMIN)
+      throw notFound('Availability not found');
     const target = await this.prisma.user.findFirst({
       where: { id: targetUserId, propertyId: user.propertyId, role: Role.RESIDENT },
       select: { id: true },
@@ -175,9 +229,13 @@ export class ReportingController {
     }
     const windows = await this.prisma.$transaction(async (tx) => {
       await tx.availabilityWindow.deleteMany({ where: { userId: user.id } });
-      return Promise.all(body.windows.map((window) => tx.availabilityWindow.create({
-        data: { ...window, userId: user.id },
-      })));
+      return Promise.all(
+        body.windows.map((window) =>
+          tx.availabilityWindow.create({
+            data: { ...window, userId: user.id },
+          }),
+        ),
+      );
     });
     return { windows };
   }
@@ -185,7 +243,9 @@ export class ReportingController {
   @Delete('availability/:id')
   @Roles(Role.RESIDENT)
   async deleteAvailability(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    const result = await this.prisma.availabilityWindow.deleteMany({ where: { id, userId: user.id } });
+    const result = await this.prisma.availabilityWindow.deleteMany({
+      where: { id, userId: user.id },
+    });
     if (!result.count) throw notFound('Availability window not found');
     return { deleted: true };
   }
@@ -206,7 +266,9 @@ export class ReportingController {
         duplicatesOf: { none: {} },
       }),
       select: {
-        id: true, status: true, createdAt: true,
+        id: true,
+        status: true,
+        createdAt: true,
         faultItem: { select: { id: true, name: true } },
         room: { select: { number: true, block: { select: { name: true } } } },
         facility: { select: { name: true, location: true } },
@@ -220,7 +282,9 @@ export class ReportingController {
         status: ticket.status,
         createdAt: ticket.createdAt,
         faultItem: ticket.faultItem,
-        location: ticket.facility?.location ?? (ticket.room ? `${ticket.room.block.name} ${ticket.room.number}` : ticket.facility?.name),
+        location:
+          ticket.facility?.location ??
+          (ticket.room ? `${ticket.room.block.name} ${ticket.room.number}` : ticket.facility?.name),
         followCount: ticket._count.duplicatedBy,
       })),
     };
@@ -234,7 +298,13 @@ export class ReportingController {
     @Scope() scope: PropertyScope,
   ) {
     let result: {
-      link: { ticketId: string; canonicalId: string; linkedById: string; id: string; createdAt: Date };
+      link: {
+        ticketId: string;
+        canonicalId: string;
+        linkedById: string;
+        id: string;
+        createdAt: Date;
+      };
       ticket: { id: string };
       repeated: boolean;
     };
@@ -249,7 +319,9 @@ export class ReportingController {
         });
         if (!canonical) throw notFound('Ticket is no longer available to follow');
         if (canonical.reporterId === user.id) throw badRequest('You cannot follow your own ticket');
-        const existing = await tx.duplicateLink.findFirst({ where: { linkedById: user.id, canonicalId } });
+        const existing = await tx.duplicateLink.findFirst({
+          where: { linkedById: user.id, canonicalId },
+        });
         if (existing) {
           return {
             link: existing,
@@ -280,7 +352,8 @@ export class ReportingController {
         return { link, ticket: follower, repeated: false };
       });
     } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002')
+        throw error;
       const existing = await this.prisma.duplicateLink.findUnique({
         where: { canonicalId_linkedById: { canonicalId, linkedById: user.id } },
       });
