@@ -55,6 +55,16 @@ enum NotificationChannel {
   PUSH
 }
 
+enum Weekday {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+  SAT
+  SUN
+}
+
 // ---------------------------------------------------------------------------
 // Property structure
 // ---------------------------------------------------------------------------
@@ -70,6 +80,7 @@ model Property {
   users           User[]
   faultCategories FaultCategory[]
   responseTargets ResponseTarget[]
+  facilities      Facility[]
   tickets         Ticket[]
   auditLogs       AuditLog[]
 }
@@ -100,6 +111,22 @@ model Room {
   @@unique([blockId, number])
 }
 
+model Facility {
+  id         String   @id @default(cuid())
+  propertyId String
+  name       String
+  location   String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tickets  Ticket[]
+
+  @@unique([propertyId, name])
+  @@index([propertyId])
+}
+
 // ---------------------------------------------------------------------------
 // People
 // ---------------------------------------------------------------------------
@@ -126,6 +153,7 @@ model User {
   ratings         Rating[]
   notifications     Notification[]
   pushSubscriptions PushSubscription[]
+  availabilityWindows AvailabilityWindow[]
   auditLogs         AuditLog[]
 
   @@index([propertyId, role])
@@ -226,7 +254,8 @@ model ResponseTarget {
 model Ticket {
   id          String       @id @default(cuid())
   propertyId  String
-  roomId      String
+  roomId      String?
+  facilityId  String?
   reporterId  String
   faultItemId String
   assigneeId  String?
@@ -240,7 +269,8 @@ model Ticket {
   closedAt    DateTime?
 
   property  Property  @relation(fields: [propertyId], references: [id])
-  room      Room      @relation(fields: [roomId], references: [id])
+  room      Room?     @relation(fields: [roomId], references: [id])
+  facility  Facility? @relation(fields: [facilityId], references: [id])
   reporter  User      @relation("TicketReporter", fields: [reporterId], references: [id])
   assignee  User?     @relation("TicketAssignee", fields: [assigneeId], references: [id])
   faultItem FaultItem @relation(fields: [faultItemId], references: [id])
@@ -258,6 +288,21 @@ model Ticket {
   @@index([propertyId, status])
   @@index([assigneeId, status])
   @@index([roomId])
+  @@index([facilityId])
+}
+
+model AvailabilityWindow {
+  id         String   @id @default(cuid())
+  userId     String
+  weekday    Weekday
+  startMinute Int
+  endMinute   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, weekday, startMinute])
 }
 
 model Photo {
@@ -288,7 +333,9 @@ model DuplicateLink {
   canonical Ticket @relation("CanonicalTicket", fields: [canonicalId], references: [id], onDelete: Cascade)
   linkedBy  User   @relation(fields: [linkedById], references: [id])
 
-  @@unique([ticketId, canonicalId])
+  @@unique([ticketId])
+  @@unique([canonicalId, linkedById])
+  @@index([canonicalId])
 }
 
 model Visit {

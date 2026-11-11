@@ -12,6 +12,7 @@ const PHOTO = { select: { id: true, kind: true, url: true, createdAt: true } } a
 
 const DETAIL_INCLUDE = {
   room: { include: { block: true } },
+  facility: true,
   faultItem: { include: { category: true } },
   reporter: { select: { id: true, name: true, phone: true } },
   assignee: PERSON,
@@ -51,6 +52,7 @@ export class TicketsService {
       take: 50,
       include: {
         room: { include: { block: true } },
+        facility: true,
         faultItem: { include: { category: true } },
         assignee: { select: { id: true, name: true } },
         visits: {

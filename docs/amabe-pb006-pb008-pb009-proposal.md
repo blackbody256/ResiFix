@@ -54,12 +54,16 @@ Rules:
 Proposed endpoints:
 
 ```text
-GET    /properties/availability
-PUT    /properties/availability
-DELETE /properties/availability/:id
+GET    /reporting/availability
+PUT    /reporting/availability
+DELETE /reporting/availability/:id
 ```
 
 The resident owns their availability. Admins may read it for support; custodians consume it through scheduling.
+An empty set means no scheduling restriction. A scheduled visit only needs its start time to fall
+inside one window because visit duration is not currently modeled. Overnight availability must be
+split at midnight. Urgent tickets do not bypass the availability hard block. Admin reads are
+property-scoped and audited; custodians only receive the scheduling result.
 
 ## PB-009: follow an existing canonical ticket
 
@@ -68,8 +72,8 @@ Use the existing `DuplicateLink` model only after creating a follower ticket, be
 Proposed flow:
 
 ```text
-GET  /reporting/tickets/:id/duplicate-candidates
-POST /reporting/tickets/:id/follow
+GET  /reporting/duplicate-candidates?faultItemId=...&roomId=...|facilityId=...
+POST /reporting/tickets/:canonicalId/follow
 ```
 
 Candidate matching:
