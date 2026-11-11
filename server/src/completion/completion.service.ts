@@ -318,6 +318,61 @@ export class CompletionService {
     };
   }
 
+  async missedVisitsRatings(input: StatsInput, scope: PropertyScope) {
+    const from = input.from ? new Date(input.from) : undefined;
+    const to = input.to ? new Date(input.to) : undefined;
+    if (from && to && from >= to) throw badRequest('The from date must be before the to date');
+
+    const dateFilter =
+      from || to ? { createdAt: { ...(from && { gte: from }), ...(to && { lt: to }) } } : {};
+    const [misses, ratings] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where: scope.where<Prisma.AuditLogWhereInput>({
+          action: 'visit.missed',
+          ...dateFilter,
+        }),
+        select: { meta: true, createdAt: true },
+      }),
+      this.prisma.rating.findMany({
+        where: scope.where<Prisma.RatingWhereInput>({ ...dateFilter }, 'ticket'),
+        select: { score: true, createdAt: true },
+      }),
+    ]);
+
+    const reasonCounts = new Map<string, number>();
+    for (const miss of misses) {
+      const meta =
+        miss.meta && typeof miss.meta === 'object' && !Array.isArray(miss.meta)
+          ? (miss.meta as { reason?: unknown })
+          : {};
+      const reason = typeof meta.reason === 'string' ? meta.reason : 'OTHER';
+      reasonCounts.set(reason, (reasonCounts.get(reason) ?? 0) + 1);
+    }
+    const scoreCounts = new Map<number, number>();
+    for (let score = 1; score <= 5; score += 1) scoreCounts.set(score, 0);
+    for (const rating of ratings)
+      scoreCounts.set(rating.score, (scoreCounts.get(rating.score) ?? 0) + 1);
+
+    return {
+      range: { from: from?.toISOString() ?? null, to: to?.toISOString() ?? null },
+      missedVisits: {
+        total: misses.length,
+        byReason: [...reasonCounts.entries()]
+          .sort(([, a], [, b]) => b - a)
+          .map(([reason, count]) => ({ reason, count })),
+      },
+      ratings: {
+        total: ratings.length,
+        averageScore: ratings.length
+          ? Number(
+              (ratings.reduce((sum, rating) => sum + rating.score, 0) / ratings.length).toFixed(2),
+            )
+          : null,
+        distribution: [...scoreCounts.entries()].map(([score, count]) => ({ score, count })),
+      },
+    };
+  }
+
   private increment(
     counts: Map<string, FaultCount>,
     id: string,

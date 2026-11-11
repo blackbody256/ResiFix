@@ -20,7 +20,7 @@ Base path: `/api`. JSON in and out. Every route needs `Authorization: Bearer <jw
 | 404    | `NOT_FOUND`         | no such record, **or it belongs to another property**                                                                                                                                    |
 | 409    | `CONFLICT`          | illegal status transition, duplicate record                                                                                                                                              |
 | 413    | `PAYLOAD_TOO_LARGE` | upload over the size limit                                                                                                                                                               |
-| 429    | `TOO_MANY_REQUESTS` | too many OTP attempts                                                                                                                                                                    |
+| 429    | `TOO_MANY_REQUESTS` | too many OTP requests or attempts; `details.retryAfterSeconds` when requests are limited (PB-002)                                                                                        |
 | 501    | `NOT_IMPLEMENTED`   | stub route, backlog item not built yet                                                                                                                                                   |
 
 - IDs are cuid strings. Timestamps are ISO 8601 UTC.
@@ -107,6 +107,23 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | POST   | `/completion/tickets/:id/verify` | RESIDENT | PB-020  |
 
 Backlog IDs and titles match the ClickUp board. Stories with no stub yet add their endpoints to this file in the PR that builds them.
+
+### Code request limits (PB-002)
+
+`POST /auth/request-otp` is limited per phone number and per client IP, so nobody can run up SMS costs or try numbers to find which are registered.
+
+| Setting                      | Default | Meaning                                       |
+| ---------------------------- | ------- | --------------------------------------------- |
+| `OTP_REQUESTS_PER_PHONE`     | 5       | Requests for one number in each window        |
+| `OTP_REQUESTS_PER_IP`        | 30      | Requests from one client IP in each window    |
+| `OTP_REQUEST_WINDOW_SECONDS` | 900     | Window length; it starts at the first request |
+
+- Over either limit: **429** `TOO_MANY_REQUESTS` with `details: { retryAfterSeconds }`, and no code is created or sent.
+- Every request that passes validation counts, including ones for unregistered numbers (404). A body that fails validation (400) does not.
+- The IP is checked first; a request blocked by its IP does not count against the phone.
+- The client IP is the one Nginx forwards (`trust proxy` is 1). Keep the IP limit generous: a hostel's residents often share one Wi-Fi address.
+- Fixed windows in Redis (`resifix:otp-limit:*`). If Redis is unreachable the limit is skipped and an error is logged, so logins keep working.
+- Wrong codes are limited separately, per code: `OTP_MAX_ATTEMPTS` (default 5), then **429** until a new code is requested.
 
 ### Response targets and breach flags (PB-012)
 
