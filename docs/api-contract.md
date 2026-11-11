@@ -93,6 +93,7 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | POST   | `/completion/tickets/:id/repair-proof`           | CUSTODIAN, ADMIN | multipart, field `photo` (JPEG/PNG/WebP, ≤ 5 MB) and `notes` (1 to 1000 characters) | 201 `{ proof: { ..., photos: [{ id, kind, createdAt }] } }`; `IN_PROGRESS` → `COMPLETED`, 409 from any other status; a custodian only on tickets assigned to them, else 403 (PB-019)     |
 | GET    | `/completion/stats`                              | ADMIN            | query `from?`, `to?`, see below                                                     | `{ range, totals, response, repair, byPriority, daily }` (PB-026)                                                                                                                        |
 | GET    | `/completion/recurring-faults`                   | ADMIN            | query `from?`, `to?`, as for stats                                                  | `{ range, totalReports, byCategory, byItem, byBlock, byRoom, byRoomFault }` (PB-027)                                                                                                     |
+| GET    | `/completion/missed-visits-ratings`              | ADMIN            | query `from?`, `to?`, as for stats                                                  | `{ range, missedVisits: { total, byReason }, ratings: { total, averageScore, distribution } }` (PB-028)                                                                                  |
 | GET    | `/notifications`                                 | any              | –                                                                                   | `{ notifications, unread }`: caller's latest 50, plus the total unread count (PB-023)                                                                                                    |
 | POST   | `/notifications/:id/read`                        | any              | –                                                                                   | `{ notification }`: marks it read (first read time kept); 404 unless it is the caller's (PB-023)                                                                                         |
 | POST   | `/notifications/read-all`                        | any              | –                                                                                   | `{ updated }`: marks all the caller's unread notifications read (PB-023)                                                                                                                 |
@@ -287,6 +288,14 @@ Response:
 - `byCategory`, `byItem`, `byBlock`, `byRoom`: `[{ id, name, group, reports, lastReportedAt }]`. `group` is the category name for items, the block name for rooms, and `null` for categories and blocks. For rooms, `name` is the room number.
 - `byRoomFault`: one entry per room and fault item, `[{ id, room, block, faultItem, category, reports, lastReportedAt }]`; `id` is `<roomId>:<faultItemId>`.
 - Every list is sorted by `reports`, most first, then by the latest report. Lists are not cut off and include entries with a single report; the client decides what counts as recurring.
+
+### Missed visits and ratings (PB-028)
+
+`GET /completion/missed-visits-ratings`: missed-visit reasons and rating totals for the admin analytics screen. Same caller rules, `from` and `to` query and 400s as `GET /completion/stats`.
+
+- Unlike stats, the range selects by when each event happened: a missed visit by when it was marked missed (audit `visit.missed`), a rating by when it was given. Not by when the ticket was reported.
+- `missedVisits { total, byReason: [{ reason, count }] }`: only reasons that occurred, most first. A miss with no recorded reason counts as `OTHER`.
+- `ratings { total, averageScore, distribution: [{ score, count }] }`: `averageScore` has two decimals, or `null` with no ratings; `distribution` always has scores 1 to 5. Totals only: no individual rating or comment is returned.
 
 ### Fault catalogue and response targets (PB-029)
 
