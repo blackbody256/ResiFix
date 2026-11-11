@@ -174,3 +174,9 @@ export const UsersIcon = make(
     <path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6" />
   </>,
 );
+export const CloudOffIcon = make(
+  <>
+    <path d="M7 18h10.5a4 4 0 0 0 1.4-7.75A6 6 0 0 0 8.2 7.1M5.2 9.3A4.5 4.5 0 0 0 7 18" />
+    <path d="M3 3l18 18" />
+  </>,
+);

@@ -6,6 +6,7 @@ import { features } from '../features';
 import { cx } from '../lib/cx';
 import { initials, useUnread } from '../lib/shell';
 import { ConsoleLayout } from './ConsoleLayout';
+import { OutboxBanner } from './OutboxBanner';
 import { BellIcon, HomeIcon, LogOutIcon, UserIcon, WrenchIcon } from './icons';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -155,6 +156,7 @@ export function Layout() {
       </header>
 
       <main className="mx-auto w-full max-w-2xl px-4 pt-4 pb-28 lg:max-w-6xl lg:px-8 lg:pt-6 lg:pb-10">
+        <OutboxBanner />
         <Outlet />
       </main>
 
