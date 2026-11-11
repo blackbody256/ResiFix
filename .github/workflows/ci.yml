@@ -50,6 +50,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: API contract matches the routes
+        run: npm run check:contract
+
       - name: Typecheck
         run: npm run typecheck
 
