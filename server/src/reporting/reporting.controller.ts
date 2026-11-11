@@ -1,14 +1,23 @@
 // OWNER: Amabe / Ayan
 // TODO:
-//   [x] PB-005  report a room fault: create a ticket (UI by Ayan).
-//               After creating it: ResponseTargetsService.startClock(id) (import CustodianModule)
-//               and CustodianAlertsService.ticketReported(id) (NotificationsModule)
+//   [x] PB-005  report a room fault: create a ticket (UI by Ayan), then start the response clock
+//               (ResponseTargetsService.startClock) and alert the custodians
+//               (CustodianAlertsService.ticketReported, PB-024)
 //   [ ] PB-006  report a shared-facility fault (UI by Ayan)
 //   [x] PB-007  upload photos: upload and presigned links work; still to do: the limit of two
 //               per ticket and on-device compression in the UI (Ayan)
 //   [ ] PB-008  provide availability for scheduling (UI by Ayan)
 //   [ ] PB-009  follow a shared fault instead of reporting a duplicate
-import { Body, Controller, Get, Param, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Logger,
+  Param,
+  Post,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Prisma, PhotoKind, Role } from '@prisma/client';
 import { z } from 'zod';
@@ -17,6 +26,8 @@ import { CurrentUser, Roles, Scope } from '../common/decorators';
 import type { PropertyScope } from '../common/property-scope';
 import type { AuthUser } from '../auth/auth-user';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { ResponseTargetsService } from '../custodian/response-targets.service';
+import { CustodianAlertsService } from '../notifications/custodian-alerts.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 
@@ -34,9 +45,13 @@ const CreateTicketBody = z.object({
 
 @Controller('reporting')
 export class ReportingController {
+  private readonly logger = new Logger(ReportingController.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly targets: ResponseTargetsService,
+    private readonly alerts: CustodianAlertsService,
   ) {}
 
   /** Fault catalogue for the caller's property. GET /api/reporting/fault-categories */
@@ -83,7 +98,27 @@ export class ReportingController {
       }),
       include: { room: { include: { block: true } }, faultItem: true },
     });
-    return { ticket };
+    return { ticket: { ...ticket, dueAt: await this.afterReport(ticket.id) } };
+  }
+
+  /**
+   * Starts the response clock (PB-012) and alerts the property's custodians (PB-024). The ticket
+   * is already saved, so a failure here is logged rather than returned: an error would make the
+   * resident send the same report again.
+   */
+  private async afterReport(ticketId: string): Promise<Date | null> {
+    let dueAt: Date | null = null;
+    try {
+      dueAt = await this.targets.startClock(ticketId);
+    } catch (err) {
+      this.logger.error(`Could not start the response clock for ticket ${ticketId}`, err);
+    }
+    try {
+      await this.alerts.ticketReported(ticketId);
+    } catch (err) {
+      this.logger.error(`Could not alert the custodians about ticket ${ticketId}`, err);
+    }
+    return dueAt;
   }
 
   /** multipart/form-data with field `photo`. POST /api/reporting/tickets/:id/photos */

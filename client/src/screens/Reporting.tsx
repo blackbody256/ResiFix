@@ -9,7 +9,8 @@
 // PB-008 (UI): availability is collected and sent as `availability`; the API does not store it
 //   yet, so the custodian cannot see it until PB-008's backend lands.
 //
-// TODO(PB-005): offline queue (save the report and send it when the connection is back).
+// PB-005 offline: with no connection the report is saved on the phone (lib/outbox.ts) and sent
+//   when the connection is back, by the page or the service worker (Background Sync).
 // TODO(PB-006): shared-facility faults (needs a schema change: Ticket.roomId is required).
 // TODO(PB-009): offer to follow a matching open fault instead of reporting a duplicate.
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
@@ -23,6 +24,7 @@ import {
   CameraIcon,
   CheckCircleIcon,
   CheckIcon,
+  CloudOffIcon,
   LightbulbIcon,
   MoonIcon,
   PencilIcon,
@@ -48,6 +50,9 @@ import { cx } from '../lib/cx';
 import { MAX_PHOTOS, PHOTO_ACCEPT, preparePhoto } from '../lib/photos';
 import { categoryKind, type Priority } from '../lib/tickets';
 import { rememberRoom, useMyRoom } from '../lib/myRoom';
+import { saveToOutbox } from '../lib/outbox';
+import { session } from '../lib/session';
+import { requestBackgroundSync } from '../lib/useOutbox';
 import { useApi } from '../lib/useApi';
 
 const MAX_DESCRIPTION = 500;
@@ -82,12 +87,26 @@ interface CreateTicketResponse {
   ticket: { id: string; reference?: string; status: string };
 }
 
+type OutboxBody = { roomId: string; faultItemId: string; description?: string };
+
 interface PickedPhoto {
   file: File;
   preview: string;
 }
 
-type Result = { ticketId: string; reference?: string; photoErrors: string[] };
+type Result =
+  | {
+      kind: 'sent';
+      ticketId: string;
+      reference?: string;
+      photoErrors: string[];
+      queuedPhotos: number;
+    }
+  | { kind: 'saved'; fault: string };
+
+/** No connection (fetch failed) or the server is unreachable behind the proxy. */
+const isOffline = (err: unknown) =>
+  err instanceof ApiError && (err.code === 'NETWORK' || [502, 503, 504].includes(err.status));
 
 function friendlyError(err: unknown): string {
   if (!(err instanceof ApiError)) return 'Something went wrong. Please try again.';
@@ -253,40 +272,85 @@ function ReportFlow({
       .join(' ');
   }
 
+  /** PB-005 offline: keep the report (and photos) on the phone and send it later. */
+  async function saveOffline(body: OutboxBody, files: File[], ticketId?: string) {
+    const user = session.user;
+    const token = session.token;
+    if (!user || !token || !item) throw new Error('Not signed in');
+    await saveToOutbox({
+      userId: user.id,
+      token,
+      body,
+      ticketId,
+      label: { fault: item.name, room: myRoom.room?.label ?? 'My room' },
+      photos: files.map((f) => ({ name: f.name, blob: f })),
+    });
+    void requestBackgroundSync();
+  }
+
   async function submit() {
     if (!item || !myRoom.roomId) return setStep(1);
     setBusy('sending');
     setError('');
+    const body: OutboxBody = {
+      roomId: myRoom.roomId,
+      faultItemId: item.id,
+      description: [description.trim(), availabilityText()].filter(Boolean).join('\n\n'),
+    };
+    const files = photos.map((p) => p.file);
+    rememberRoom(myRoom.roomId);
+
     let ticketId: string;
     let reference: string | undefined;
     try {
-      const { ticket } = await api.post<CreateTicketResponse>('/reporting/tickets', {
-        roomId: myRoom.roomId,
-        faultItemId: item.id,
-        description: [description.trim(), availabilityText()].filter(Boolean).join('\n\n'),
-      });
-      rememberRoom(myRoom.roomId);
+      if (!navigator.onLine) throw new ApiError(0, 'NETWORK', 'offline');
+      const { ticket } = await api.post<CreateTicketResponse>('/reporting/tickets', body);
       ticketId = ticket.id;
       reference = ticket.reference;
     } catch (err) {
+      if (isOffline(err)) {
+        try {
+          await saveOffline(body, files);
+          setBusy('');
+          onDone({ kind: 'saved', fault: item.name });
+        } catch {
+          setBusy('');
+          setError(
+            'You are offline and the report could not be saved on this phone. Try again when you have signal.',
+          );
+        }
+        return;
+      }
       setBusy('');
       setError(friendlyError(err));
       return;
     }
 
-    // The ticket exists now: report photo failures but never lose the report.
+    // The ticket exists now: report photo failures but never lose the report. If the
+    // connection drops part-way, the remaining photos go to the outbox for this ticket.
     const photoErrors: string[] = [];
-    for (const { file } of photos) {
+    let queued: File[] = [];
+    for (const [i, file] of files.entries()) {
       const form = new FormData();
       form.append('photo', file);
       try {
         await api.upload(`/reporting/tickets/${ticketId}/photos`, form);
       } catch (err) {
+        if (isOffline(err)) {
+          queued = files.slice(i);
+          break;
+        }
         photoErrors.push(`${file.name}: ${friendlyError(err)}`);
       }
     }
+    if (queued.length) {
+      await saveOffline(body, queued, ticketId).catch(() => {
+        photoErrors.push(...queued.map((f) => `${f.name}: could not be saved to send later`));
+        queued = [];
+      });
+    }
     setBusy('');
-    onDone({ ticketId, reference, photoErrors });
+    onDone({ kind: 'sent', ticketId, reference, photoErrors, queuedPhotos: queued.length });
   }
 
   const header = (title: string, extra?: ReactNode) => (
@@ -893,6 +957,29 @@ function SummaryRow({
 }
 
 function Submitted({ result, onAnother }: { result: Result; onAnother: () => void }) {
+  if (result.kind === 'saved') {
+    return (
+      <div className="mx-auto max-w-xl space-y-4">
+        <Card className="text-center">
+          <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-secondary-container text-on-secondary-container">
+            <CloudOffIcon size={30} />
+          </span>
+          <h1 className="mt-3 text-2xl font-extrabold">Saved on this phone</h1>
+          <p className="mt-2 text-on-surface-variant">
+            You have no connection right now, so your {result.fault.toLowerCase()} report and its
+            photos are saved here. ResiFix sends them automatically as soon as you are back online.
+          </p>
+        </Card>
+        <Notice icon={<LightbulbIcon size={18} />}>
+          You can close the app. On Android it sends in the background; on other phones it sends the
+          next time you open ResiFix. Waiting reports are listed at the top of the app.
+        </Notice>
+        <Button variant="outline" onClick={onAnother}>
+          Report another fault
+        </Button>
+      </div>
+    );
+  }
   return (
     <div className="mx-auto max-w-xl space-y-4">
       <Card className="text-center">
@@ -909,6 +996,13 @@ function Submitted({ result, onAnother }: { result: Result; onAnother: () => voi
           Your report has been sent. We will let you know when it is reviewed and a visit is booked.
         </p>
       </Card>
+      {result.queuedPhotos > 0 && (
+        <Notice icon={<CloudOffIcon size={18} />}>
+          The connection dropped while uploading. {result.queuedPhotos} photo
+          {result.queuedPhotos > 1 ? 's are' : ' is'} saved on this phone and will be added to the
+          ticket when you are back online.
+        </Notice>
+      )}
       {result.photoErrors.length > 0 && (
         <Notice tone="warning" icon={<AlertIcon size={18} />}>
           <p className="font-semibold">Some photos did not upload:</p>

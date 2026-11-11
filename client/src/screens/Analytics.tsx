@@ -54,6 +54,33 @@ interface StatsResponse {
   }[];
 }
 
+interface FaultCount {
+  id: string;
+  name: string;
+  group: string | null;
+  reports: number;
+  lastReportedAt: string;
+}
+
+interface RoomFaultCount {
+  id: string;
+  room: string;
+  block: string;
+  faultItem: string;
+  category: string;
+  reports: number;
+  lastReportedAt: string;
+}
+
+interface RecurringFaultResponse {
+  totalReports: number;
+  byCategory: FaultCount[];
+  byItem: FaultCount[];
+  byBlock: FaultCount[];
+  byRoom: FaultCount[];
+  byRoomFault: RoomFaultCount[];
+}
+
 const minutes = (value: number | null) => {
   if (value === null) return '—';
   if (value < 60) return `${value} min`;
@@ -72,6 +99,12 @@ export function Analytics() {
   if (appliedRange.to) query.set('to', queryDate(appliedRange.to, true));
   const path = `/completion/stats${query.size ? `?${query.toString()}` : ''}`;
   const { data, error, loading } = useApi<StatsResponse>(path);
+  const recurringPath = `/completion/recurring-faults${query.size ? `?${query.toString()}` : ''}`;
+  const {
+    data: recurring,
+    error: recurringError,
+    loading: recurringLoading,
+  } = useApi<RecurringFaultResponse>(recurringPath);
   const rangeError = from && to && from > to ? 'Choose a start date before the end date.' : '';
 
   const trendLabels = data?.daily.map((day) => day.date.slice(5)) ?? [];
@@ -106,6 +139,19 @@ export function Analytics() {
         label: 'Average repair (minutes)',
         data: data?.byPriority.map((item) => item.averageRepairMinutes) ?? [],
         backgroundColor: '#d97706',
+      },
+    ],
+  };
+  const recurringItemData = {
+    labels:
+      recurring?.byItem
+        .slice(0, 8)
+        .map((item) => (item.group ? `${item.name} · ${item.group}` : item.name)) ?? [],
+    datasets: [
+      {
+        label: 'Reports',
+        data: recurring?.byItem.slice(0, 8).map((item) => item.reports) ?? [],
+        backgroundColor: '#0f766e',
       },
     ],
   };
@@ -169,6 +215,8 @@ export function Analytics() {
 
       {loading && <Spinner label="Loading performance data…" />}
       <ErrorText>{error?.message}</ErrorText>
+      {recurringLoading && <Spinner label="Loading recurring-fault data…" />}
+      <ErrorText>{recurringError?.message}</ErrorText>
 
       {data && (
         <>
@@ -190,7 +238,10 @@ export function Analytics() {
 
           <div className="grid gap-5 lg:grid-cols-2">
             <Card>
-              <h2 className="mb-4 text-lg font-bold">Ticket volume</h2>
+              <h2 className="text-lg font-bold">Ticket volume</h2>
+              <p className="mb-4 text-sm text-on-surface-variant">
+                Reports received and repairs completed each day.
+              </p>
               <div className="relative h-64">
                 <Line
                   data={trendData}
@@ -207,7 +258,10 @@ export function Analytics() {
               </div>
             </Card>
             <Card>
-              <h2 className="mb-4 text-lg font-bold">Time by priority</h2>
+              <h2 className="text-lg font-bold">Time by priority</h2>
+              <p className="mb-4 text-sm text-on-surface-variant">
+                Average minutes from report to arrival and completion.
+              </p>
               <div className="relative h-64">
                 <Bar
                   data={priorityData}
@@ -265,7 +319,115 @@ export function Analytics() {
               </table>
             </div>
           </Card>
+
+          {recurring && (
+            <Card>
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold">Recurring faults</h2>
+                  <p className="text-sm text-on-surface-variant">
+                    {recurring.totalReports} reports grouped by fault item and location. A repeated
+                    item has more than one report in this range.
+                  </p>
+                </div>
+                <span className="rounded-full bg-surface-variant px-3 py-1 text-xs font-bold text-on-surface-variant">
+                  {recurring.byItem.filter((item) => item.reports > 1).length} repeated items
+                </span>
+              </div>
+              <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+                <div className="relative h-64">
+                  <Bar
+                    data={recurringItemData}
+                    options={{
+                      indexAxis: 'y',
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      animation: false,
+                      scales: {
+                        x: {
+                          beginAtZero: true,
+                          title: { display: true, text: 'Number of reports' },
+                        },
+                        y: { title: { display: true, text: 'Fault item · category' } },
+                      },
+                    }}
+                  />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+                  <FaultBreakdown title="Fault categories" items={recurring.byCategory} />
+                  <FaultBreakdown title="Blocks with reports" items={recurring.byBlock} />
+                </div>
+              </div>
+              <RoomFaultTable items={recurring.byRoomFault} />
+            </Card>
+          )}
         </>
+      )}
+    </div>
+  );
+}
+
+function FaultBreakdown({ title, items }: { title: string; items: FaultCount[] }) {
+  return (
+    <div>
+      <h3 className="mb-1 text-sm font-bold text-on-surface-variant">{title}</h3>
+      {items.length ? (
+        <ul className="space-y-1 text-sm">
+          {items.slice(0, 5).map((item) => (
+            <li key={item.id} className="flex justify-between gap-3">
+              <span className="truncate">
+                {item.name}
+                {item.group && <span className="text-on-surface-variant"> · {item.group}</span>}
+              </span>
+              <span className="shrink-0 font-bold">
+                {item.reports} {item.reports === 1 ? 'report' : 'reports'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-on-surface-variant">No reports in this range.</p>
+      )}
+    </div>
+  );
+}
+
+function RoomFaultTable({ items }: { items: RoomFaultCount[] }) {
+  return (
+    <div className="mt-5 border-t border-outline-variant/60 pt-4">
+      <h3 className="text-sm font-bold text-on-surface-variant">
+        Rooms and their recurring faults
+      </h3>
+      <p className="mb-3 text-sm text-on-surface-variant">
+        Each row identifies the exact room, block, and fault item being reported.
+      </p>
+      {items.length ? (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-180 text-left text-sm">
+            <thead className="border-b border-outline-variant text-xs tracking-wide text-on-surface-variant uppercase">
+              <tr>
+                <th className="pb-2">Room</th>
+                <th className="pb-2">Block</th>
+                <th className="pb-2">Fault item</th>
+                <th className="pb-2">Category</th>
+                <th className="pb-2">Reports</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id} className="border-b border-outline-variant/50 last:border-0">
+                  <td className="py-3 font-semibold">{item.room}</td>
+                  <td className="py-3">{item.block}</td>
+                  <td className="py-3">{item.faultItem}</td>
+                  <td className="py-3">{item.category}</td>
+                  <td className="py-3 font-bold">{item.reports}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="text-sm text-on-surface-variant">No room-level reports in this range.</p>
       )}
     </div>
   );

@@ -1,6 +1,6 @@
 // OWNER: Andrew (PB-012..PB-018). Types and helpers for the custodian console, matching
 // docs/api-contract.md: GET /custodian/queue, /custodian/staff and the ticket/visit actions.
-import type { Priority, TicketStatus } from './tickets';
+import { priorityLabel, ticketRef, type Priority, type TicketStatus } from './tickets';
 
 export type TargetState = 'ON_TRACK' | 'DUE_SOON' | 'OVERDUE';
 
@@ -61,6 +61,34 @@ export interface Visit {
   notes: string | null;
   custodian: Person;
 }
+
+/** GET /custodian/targets (PB-012). `category: null` is the property-wide target. */
+export interface ResponseTarget {
+  id: string;
+  priority: Priority;
+  category: { id: string; name: string } | null;
+  respondWithinH: number;
+  resolveWithinH: number;
+}
+
+/**
+ * Status names for staff. The resident app words them for residents ("Confirm repair"); a
+ * custodian needs to read the same COMPLETED ticket as "Awaiting sign-off".
+ */
+export const STAFF_STATUS: Record<TicketStatus, { label: string; pill: string }> = {
+  REPORTED: { label: 'Under review', pill: 'bg-surface text-console-nav' },
+  REVIEWED: { label: 'Reviewed', pill: 'bg-surface text-console-nav' },
+  REOPENED: { label: 'Reopened', pill: 'bg-tertiary-container text-console-red' },
+  ASSIGNED: { label: 'Assigned', pill: 'bg-surface-variant text-console-nav' },
+  SCHEDULED: { label: 'Visit scheduled', pill: 'bg-surface-variant text-console-nav' },
+  IN_PROGRESS: { label: 'In progress', pill: 'bg-primary-container text-on-primary-container' },
+  COMPLETED: { label: 'Awaiting sign-off', pill: 'bg-console-peach text-console-peach-ink' },
+  STUDENT_CONFIRMED: {
+    label: 'Fixed',
+    pill: 'bg-success-container text-on-success-container',
+  },
+  CLOSED: { label: 'Closed', pill: 'bg-success-container text-on-success-container' },
+};
 
 /** What the next step is called on buttons, and what it means. */
 export const NEXT_STEP: Record<NextStep, { action: string; hint: string }> = {
@@ -135,8 +163,79 @@ export function nextSlot(now = new Date()): Date {
   return d;
 }
 
+const clock = (d: Date) => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+/** ["Today", "2:00 PM"], ["Yesterday", "9:15 AM"], ["Sat 7 Nov", "10:53 AM"]: for table cells. */
+export function dayAndTime(iso: string, now = new Date()): [string, string] {
+  const d = new Date(iso);
+  const days = Math.round(
+    (new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() -
+      new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) /
+      86_400_000,
+  );
+  const day =
+    days === 0
+      ? 'Today'
+      : days === -1
+        ? 'Yesterday'
+        : days === 1
+          ? 'Tomorrow'
+          : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  return [day, clock(d)];
+}
+
+/** "2:00 PM" today, otherwise "Tomorrow 9:00 AM", "Sat 7 Nov 10:53 AM": a deadline in a cell. */
+export function shortWhen(iso: string, now = new Date()): string {
+  const [day, time] = dayAndTime(iso, now);
+  return day === 'Today' ? time : `${day} ${time}`;
+}
+
 /** Same calendar day on this device. */
 export const sameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() &&
   a.getMonth() === b.getMonth() &&
   a.getDate() === b.getDate();
+
+/** One CSV cell: quoted when needed, and never read as a formula by a spreadsheet. */
+function csvCell(value: string): string {
+  const text = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+const localTime = (iso: string | null | undefined) =>
+  iso ? toLocalInput(new Date(iso)).replace('T', ' ') : '';
+
+/** The work queue as a CSV file for the estates office (times in the device's time zone). */
+export function queueCsv(items: QueueItem[]): string {
+  const head = [
+    'Ticket',
+    'Block',
+    'Room',
+    'Category',
+    'Fault',
+    'Description',
+    'Priority',
+    'Status',
+    'Assigned to',
+    'Next visit',
+    'Target',
+    'Due',
+    'Reported',
+  ];
+  const rows = items.map((i) => [
+    ticketRef(i),
+    i.room.block.name,
+    i.room.number,
+    i.faultItem.category.name,
+    i.faultItem.name,
+    i.description ?? '',
+    priorityLabel(i.priority),
+    STAFF_STATUS[i.status]?.label ?? i.status,
+    i.assignee?.name ?? '',
+    localTime(i.nextVisit?.scheduledAt),
+    i.target ? TARGET_TONE[i.target.state].label : '',
+    localTime(i.target?.dueAt),
+    localTime(i.createdAt),
+  ]);
+  return [head, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
+}

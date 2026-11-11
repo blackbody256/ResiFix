@@ -26,6 +26,23 @@ export type RepairProofBody = z.infer<typeof RepairProofBody>;
 type StatsInput = { from?: string; to?: string };
 
 type Duration = { minutes: number; withinTarget: boolean };
+type FaultCount = {
+  id: string;
+  name: string;
+  group: string | null;
+  reports: number;
+  lastReportedAt: Date;
+};
+
+type RoomFaultCount = {
+  id: string;
+  room: string;
+  block: string;
+  faultItem: string;
+  category: string;
+  reports: number;
+  lastReportedAt: Date;
+};
 
 const PRIORITIES: Priority[] = [Priority.URGENT, Priority.HIGH, Priority.MEDIUM, Priority.LOW];
 
@@ -220,6 +237,137 @@ export class CompletionService {
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([date, values]) => ({ date, ...this.groupSummary(values) })),
     };
+  }
+
+  async recurringFaults(input: StatsInput, scope: PropertyScope) {
+    const from = input.from ? new Date(input.from) : undefined;
+    const to = input.to ? new Date(input.to) : undefined;
+    if (from && to && from >= to) throw badRequest('The from date must be before the to date');
+
+    const tickets = await this.prisma.ticket.findMany({
+      where: scope.where<Prisma.TicketWhereInput>({
+        ...((from || to) && { createdAt: { ...(from && { gte: from }), ...(to && { lt: to }) } }),
+      }),
+      select: {
+        createdAt: true,
+        faultItem: {
+          select: {
+            id: true,
+            name: true,
+            category: { select: { id: true, name: true } },
+          },
+        },
+        room: {
+          select: {
+            id: true,
+            number: true,
+            block: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    const categories = new Map<string, FaultCount>();
+    const items = new Map<string, FaultCount>();
+    const blocks = new Map<string, FaultCount>();
+    const rooms = new Map<string, FaultCount>();
+    const roomFaults = new Map<string, RoomFaultCount>();
+
+    for (const ticket of tickets) {
+      this.increment(
+        categories,
+        ticket.faultItem.category.id,
+        ticket.faultItem.category.name,
+        ticket.createdAt,
+      );
+      this.increment(
+        items,
+        ticket.faultItem.id,
+        ticket.faultItem.name,
+        ticket.createdAt,
+        ticket.faultItem.category.name,
+      );
+      this.increment(blocks, ticket.room.block.id, ticket.room.block.name, ticket.createdAt);
+      this.increment(
+        rooms,
+        ticket.room.id,
+        ticket.room.number,
+        ticket.createdAt,
+        ticket.room.block.name,
+      );
+      this.incrementRoomFault(
+        roomFaults,
+        ticket.room.id,
+        ticket.room.number,
+        ticket.room.block.name,
+        ticket.faultItem.id,
+        ticket.faultItem.name,
+        ticket.faultItem.category.name,
+        ticket.createdAt,
+      );
+    }
+
+    return {
+      range: { from: from?.toISOString() ?? null, to: to?.toISOString() ?? null },
+      totalReports: tickets.length,
+      byCategory: this.sortedCounts(categories),
+      byItem: this.sortedCounts(items),
+      byBlock: this.sortedCounts(blocks),
+      byRoom: this.sortedCounts(rooms),
+      byRoomFault: this.sortedRoomFaults(roomFaults),
+    };
+  }
+
+  private increment(
+    counts: Map<string, FaultCount>,
+    id: string,
+    name: string,
+    createdAt: Date,
+    group?: string,
+  ) {
+    const current = counts.get(id);
+    if (current) {
+      current.reports += 1;
+      if (createdAt > current.lastReportedAt) current.lastReportedAt = createdAt;
+      return;
+    }
+    counts.set(id, { id, name, group: group ?? null, reports: 1, lastReportedAt: createdAt });
+  }
+
+  private sortedCounts(counts: Map<string, FaultCount>) {
+    return [...counts.values()]
+      .sort(
+        (a, b) => b.reports - a.reports || b.lastReportedAt.getTime() - a.lastReportedAt.getTime(),
+      )
+      .map((item) => ({ ...item, lastReportedAt: item.lastReportedAt.toISOString() }));
+  }
+
+  private incrementRoomFault(
+    counts: Map<string, RoomFaultCount>,
+    roomId: string,
+    room: string,
+    block: string,
+    faultItemId: string,
+    faultItem: string,
+    category: string,
+    createdAt: Date,
+  ) {
+    const id = `${roomId}:${faultItemId}`;
+    const current = counts.get(id);
+    if (current) {
+      current.reports += 1;
+      if (createdAt > current.lastReportedAt) current.lastReportedAt = createdAt;
+      return;
+    }
+    counts.set(id, { id, room, block, faultItem, category, reports: 1, lastReportedAt: createdAt });
+  }
+
+  private sortedRoomFaults(counts: Map<string, RoomFaultCount>) {
+    return [...counts.values()]
+      .sort(
+        (a, b) => b.reports - a.reports || b.lastReportedAt.getTime() - a.lastReportedAt.getTime(),
+      )
+      .map((item) => ({ ...item, lastReportedAt: item.lastReportedAt.toISOString() }));
   }
 
   private duration(start: Date, end: Date, targetHours?: number): Duration {

@@ -3,10 +3,11 @@ import { Module } from '@nestjs/common';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { CompletionController } from './completion.controller';
 import { CompletionService } from './completion.service';
+import { RatingService } from './rating.service';
 
 @Module({
   imports: [NotificationsModule],
   controllers: [CompletionController],
-  providers: [CompletionService],
+  providers: [CompletionService, RatingService], // RatingService: PB-022 (Ayan)
 })
 export class CompletionModule {}

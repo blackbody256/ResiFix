@@ -8,9 +8,11 @@ import {
   TicketIcon,
   WrenchIcon,
   ChartIcon,
+  SettingsIcon,
 } from './components/icons';
 import type { Role } from './lib/session';
 import { Account } from './screens/Account';
+import { Administration } from './screens/Administration';
 import { Analytics } from './screens/Analytics';
 import { Completion } from './screens/Completion';
 import { Custodian } from './screens/Custodian';
@@ -76,6 +78,13 @@ export const features: Feature[] = [
     element: <Analytics />,
     nav: true,
     icon: ChartIcon,
+  },
+  {
+    path: '/service-setup',
+    label: 'Service setup',
+    roles: ['ADMIN'],
+    element: <Administration />,
+    icon: SettingsIcon,
   },
   // OWNER: Ayan: PB-023. Opened from the bell in the top bar.
   { path: '/notifications', label: 'Updates', element: <Notifications /> },

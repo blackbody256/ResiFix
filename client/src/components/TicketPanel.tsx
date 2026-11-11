@@ -19,7 +19,7 @@ import {
   type Visit,
 } from '../lib/custodian';
 import { ago, type Priority, priorityLabel, ticketRef, when } from '../lib/tickets';
-import { PriorityBadge, TargetBadge } from './custodian';
+import { PriorityBadge, StaffStatusPill, TargetBadge } from './custodian';
 import {
   AlertIcon,
   ArrowLeftIcon,
@@ -31,7 +31,7 @@ import {
   UsersIcon,
   WrenchIcon,
 } from './icons';
-import { CategoryTile, StatusPill } from './tickets';
+import { CategoryTile } from './tickets';
 import { Button, ErrorText, Eyebrow, Input, Notice, Spinner, Textarea } from './ui';
 
 /** Statuses the queue can return, used to look a ticket up by id. */
@@ -150,7 +150,7 @@ export function TicketPanel({
           <span className="font-mono text-sm font-semibold text-on-surface-variant">
             {item ? ticketRef(item) : ''}
           </span>
-          {item && <StatusPill status={item.status} className="ml-auto" />}
+          {item && <StaffStatusPill status={item.status} className="ml-auto" />}
         </header>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">

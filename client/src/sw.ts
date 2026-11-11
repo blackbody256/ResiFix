@@ -8,6 +8,7 @@ import {
 } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { NetworkOnly } from 'workbox-strategies';
+import { flushOutbox, OUTBOX_SYNC_TAG } from './lib/outbox';
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{ url: string; revision: string | null }>;
@@ -21,8 +22,23 @@ cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
 
 // API calls always hit the network: responses are per-user and must not be cached.
-// TODO(PB-005): queue offline fault reports with workbox-background-sync.
 registerRoute(({ url }) => url.pathname.startsWith('/api/'), new NetworkOnly());
+
+// Offline fault reports (PB-005): the page saves a report made with no signal in the outbox
+// (lib/outbox.ts) and registers this sync. The browser fires it once the connection is back,
+// even with the app closed (Chrome/Android); elsewhere the page sends when it next opens.
+// A plain Workbox queue cannot do this: the photo uploads need the id of the ticket created
+// in the first request.
+self.addEventListener('sync', (event) => {
+  const e = event as ExtendableEvent & { tag?: string };
+  if (e.tag !== OUTBOX_SYNC_TAG) return;
+  // Rejecting makes the browser retry the sync later (with backoff) while reports still wait.
+  e.waitUntil(
+    flushOutbox().then(({ waiting }) => {
+      if (waiting) throw new Error(`${waiting} report(s) still waiting to send`);
+    }),
+  );
+});
 
 // SPA navigations fall back to the cached index.html.
 registerRoute(
