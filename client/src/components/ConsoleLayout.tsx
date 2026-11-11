@@ -9,7 +9,16 @@ import { cx } from '../lib/cx';
 import { initials, useUnread } from '../lib/shell';
 import { useApi } from '../lib/useApi';
 import { CalendarCheckIcon, ClipboardIcon, GridIcon } from './console-icons';
-import { BellIcon, BuildingIcon, HomeIcon, LogOutIcon, UserIcon, WrenchIcon } from './icons';
+import {
+  BellIcon,
+  BuildingIcon,
+  ChartIcon,
+  HomeIcon,
+  LogOutIcon,
+  SettingsIcon,
+  UserIcon,
+  WrenchIcon,
+} from './icons';
 
 interface NavItem {
   path: string;
@@ -40,6 +49,20 @@ const NAV: NavItem[] = [
     adminOnly: true,
   },
   {
+    path: '/analytics',
+    label: 'Analytics',
+    short: 'Analytics',
+    icon: ChartIcon,
+    adminOnly: true,
+  },
+  {
+    path: '/service-setup',
+    label: 'Faults & response rules',
+    short: 'Setup',
+    icon: SettingsIcon,
+    adminOnly: true,
+  },
+  {
     path: '/notifications',
     label: 'Notifications & Account',
     short: 'Updates',
@@ -55,6 +78,8 @@ const PAGE_TITLE: [string, string][] = [
   ['/account', 'Account'],
   ['/tickets', 'Ticket'],
   ['/properties', 'Property'],
+  ['/analytics', 'Analytics'],
+  ['/service-setup', 'Faults & response rules'],
 ];
 
 const ROLE_LABEL: Record<string, string> = { CUSTODIAN: 'Custodian', ADMIN: 'Hall administrator' };

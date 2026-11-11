@@ -147,6 +147,12 @@ export const ChartIcon = make(
     <path d="m7 15 3-4 3 2 4-6" />
   </>,
 );
+export const SettingsIcon = make(
+  <>
+    <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" />
+    <path d="M4.9 4.9 7 7M17 7l2.1-2.1M7 17l-2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M12 2v3M12 19v3" />
+  </>,
+);
 export const StarIcon = make(
   <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z" />,
 );
