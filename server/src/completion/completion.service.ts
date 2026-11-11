@@ -45,6 +45,12 @@ type RoomFaultCount = {
 };
 
 const PRIORITIES: Priority[] = [Priority.URGENT, Priority.HIGH, Priority.MEDIUM, Priority.LOW];
+const KAMPALA_DATE = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Africa/Kampala',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
 
 @Injectable()
 export class CompletionService {
@@ -173,50 +179,61 @@ export class CompletionService {
     }
 
     for (const ticket of tickets) {
-      const day = ticket.createdAt.toISOString().slice(0, 10);
-      const dayStats = daily.get(day) ?? {
-        reported: 0,
-        responded: 0,
-        completed: 0,
-        response: [],
-        repair: [],
-      };
-      dayStats.reported += 1;
-      daily.set(day, dayStats);
-
       const priorityStats = byPriority.get(ticket.priority)!;
       priorityStats.reported += 1;
-
-      const reopenedAt = ticket.auditLogs
-        .filter((log) => log.toStatus === TicketStatus.REOPENED)
-        .at(-1)?.createdAt;
-      const clockStart =
-        reopenedAt && reopenedAt > ticket.createdAt ? reopenedAt : ticket.createdAt;
       const target =
         targets.find(
           (rule) =>
             rule.categoryId === ticket.faultItem.categoryId && rule.priority === ticket.priority,
         ) ?? targets.find((rule) => rule.categoryId === null && rule.priority === ticket.priority);
-      const arrivedAt = ticket.visits[0]?.arrivedAt;
-      const completedAt =
-        ticket.auditLogs.find((log) => log.action === 'ticket.repair_completed')?.createdAt ??
-        ticket.repairProofs[0]?.createdAt;
 
-      if (arrivedAt && arrivedAt >= clockStart) {
-        const duration = this.duration(clockStart, arrivedAt, target?.respondWithinH);
-        responseDurations.push(duration);
-        dayStats.responded += 1;
-        dayStats.response.push(duration.minutes);
-        priorityStats.responded += 1;
-        priorityStats.response.push(duration.minutes);
-      }
-      if (completedAt && completedAt >= clockStart) {
-        const duration = this.duration(clockStart, completedAt, target?.resolveWithinH);
-        repairDurations.push(duration);
-        dayStats.completed += 1;
-        dayStats.repair.push(duration.minutes);
-        priorityStats.completed += 1;
-        priorityStats.repair.push(duration.minutes);
+      const cycleStarts = [
+        ticket.createdAt,
+        ...ticket.auditLogs
+          .filter((log) => log.toStatus === TicketStatus.REOPENED)
+          .map((log) => log.createdAt),
+      ].sort((a, b) => a.getTime() - b.getTime());
+      for (const [cycleIndex, clockStart] of cycleStarts.entries()) {
+        const cycleEnd = cycleStarts[cycleIndex + 1];
+        const day = kampalaDate(clockStart);
+        const dayStats = daily.get(day) ?? {
+          reported: 0,
+          responded: 0,
+          completed: 0,
+          response: [],
+          repair: [],
+        };
+        if (cycleIndex === 0) dayStats.reported += 1;
+
+        const arrivedAt = ticket.visits
+          .map((visit) => visit.arrivedAt)
+          .find((at) => at && at >= clockStart && (!cycleEnd || at < cycleEnd));
+        const completedAt = [
+          ...ticket.auditLogs
+            .filter((log) => log.action === 'ticket.repair_completed')
+            .map((log) => log.createdAt),
+          ...ticket.repairProofs.map((proof) => proof.createdAt),
+        ]
+          .sort((a, b) => a.getTime() - b.getTime())
+          .find((at) => at >= clockStart && (!cycleEnd || at < cycleEnd));
+
+        if (arrivedAt) {
+          const duration = this.duration(clockStart, arrivedAt, target?.respondWithinH);
+          responseDurations.push(duration);
+          dayStats.responded += 1;
+          dayStats.response.push(duration.minutes);
+          priorityStats.responded += 1;
+          priorityStats.response.push(duration.minutes);
+        }
+        if (completedAt) {
+          const duration = this.duration(clockStart, completedAt, target?.resolveWithinH);
+          repairDurations.push(duration);
+          dayStats.completed += 1;
+          dayStats.repair.push(duration.minutes);
+          priorityStats.completed += 1;
+          priorityStats.repair.push(duration.minutes);
+        }
+        daily.set(day, dayStats);
       }
     }
 
@@ -462,4 +479,11 @@ export class CompletionService {
       return created;
     });
   }
+}
+
+function kampalaDate(date: Date) {
+  const parts = Object.fromEntries(
+    KAMPALA_DATE.formatToParts(date).map(({ type, value }) => [type, value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }

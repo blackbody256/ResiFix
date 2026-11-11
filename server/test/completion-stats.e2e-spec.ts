@@ -152,4 +152,67 @@ describe('PB-026 response and repair-time stats', () => {
       .expect(400);
     expect(invalid.body.error.code).toBe('BAD_REQUEST');
   });
+
+  it('counts response and repair cycles again after a ticket is reopened', async () => {
+    const now = Date.now();
+    const reopened = await createTicket(t.prisma, home, {
+      reporter: home.residents[0],
+      status: TicketStatus.COMPLETED,
+      priority: Priority.HIGH,
+      assignee: home.custodian,
+      createdAt: new Date(now - 12 * HOUR),
+    });
+    await t.prisma.visit.createMany({
+      data: [
+        {
+          ticketId: reopened.id,
+          custodianId: home.custodian.id,
+          scheduledAt: new Date(now - 11 * HOUR),
+          arrivedAt: new Date(now - 11 * HOUR),
+        },
+        {
+          ticketId: reopened.id,
+          custodianId: home.custodian.id,
+          scheduledAt: new Date(now - 2 * HOUR),
+          arrivedAt: new Date(now - 2 * HOUR),
+        },
+      ],
+    });
+    await t.prisma.auditLog.createMany({
+      data: [
+        {
+          propertyId: home.property.id,
+          ticketId: reopened.id,
+          actorId: home.custodian.id,
+          action: 'ticket.repair_completed',
+          fromStatus: TicketStatus.IN_PROGRESS,
+          toStatus: TicketStatus.COMPLETED,
+          createdAt: new Date(now - 10 * HOUR),
+        },
+        {
+          propertyId: home.property.id,
+          ticketId: reopened.id,
+          actorId: home.residents[0].id,
+          action: 'ticket.reopened',
+          fromStatus: TicketStatus.COMPLETED,
+          toStatus: TicketStatus.REOPENED,
+          createdAt: new Date(now - 3 * HOUR),
+        },
+        {
+          propertyId: home.property.id,
+          ticketId: reopened.id,
+          actorId: home.custodian.id,
+          action: 'ticket.repair_completed',
+          fromStatus: TicketStatus.IN_PROGRESS,
+          toStatus: TicketStatus.COMPLETED,
+          createdAt: new Date(now - HOUR),
+        },
+      ],
+    });
+
+    const response = await t.as(home.admin).get('/completion/stats').expect(200);
+    expect(response.body.totals).toEqual({ reported: 4, responded: 4, completed: 4 });
+    expect(response.body.response.sampleSize).toBe(4);
+    expect(response.body.repair.sampleSize).toBe(4);
+  });
 });
