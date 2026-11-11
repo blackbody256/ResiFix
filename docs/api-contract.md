@@ -67,6 +67,7 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | GET    | `/reporting/photos/:photoId/link`   | any              | –                                                | `{ url, expiresAt }`: presigned link; residents: own tickets                                                                                                                |
 | GET    | `/tickets`                          | any              | –                                                | `{ tickets }`, latest 50. Residents see only their own. Each has `room`, `faultItem.category`, `assignee { id, name }` and `nextVisit { id, scheduledAt } \| null` (PB-010) |
 | GET    | `/tickets/:id`                      | any              | –                                                | `{ ticket }` with photos, visits, proof, `timeline` (PB-010)                                                                                                                |
+| POST   | `/completion/tickets/:id/rating`    | RESIDENT         | `{ score: 1..5, comment? }` (comment ≤ 500)      | 201 `{ rating: { score, comment, createdAt } }` (PB-022)                                                                                                                    |
 | GET    | `/custodian/targets`                | CUSTODIAN, ADMIN | –                                                | `{ targets: [{ id, priority, category, respondWithinH, resolveWithinH }] }` (PB-012)                                                                                        |
 | GET    | `/custodian/staff`                  | CUSTODIAN, ADMIN | –                                                | `{ staff: [{ id, name }] }`: active custodians of the property, for the assign and visit pickers (PB-013)                                                                   |
 | GET    | `/custodian/queue`                  | CUSTODIAN, ADMIN | query, see below                                 | `{ tickets: QueueItem[], summary }` (PB-013)                                                                                                                                |
@@ -94,7 +95,6 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | POST   | `/reporting/tickets`                   | RESIDENT         | PB-005, PB-006 |
 | POST   | `/completion/tickets/:id/repair-proof` | CUSTODIAN, ADMIN | PB-019         |
 | POST   | `/completion/tickets/:id/verify`       | RESIDENT         | PB-020         |
-| POST   | `/completion/tickets/:id/rating`       | RESIDENT         | PB-022         |
 
 Backlog IDs and titles match the ClickUp board. Stories with no stub yet add their endpoints to this file in the PR that builds them.
 
@@ -215,6 +215,16 @@ PB-005 and PB-020 also call `ResponseTargetsService.startClock(ticketId)` (expor
 | `repairCompleted(ticketId)` | PB-019, after proof of repair (`IN_PROGRESS` → `COMPLETED`)       | "Repair finished": confirm or dispute within the auto-close hours |
 
 Already sent to the resident elsewhere, so not repeated: visit booked, moved or missed, and repair started (custodian `VisitsService`), and the 48-hour auto-close (worker, PB-021).
+
+### Rate the service (PB-022)
+
+`POST /completion/tickets/:id/rating { score, comment? }`: the resident who reported the ticket rates the repair, once.
+
+- Only the reporter, in their own property: **404** for anyone else's ticket. Staff get **403**.
+- Only when the repair is done: `COMPLETED`, `STUDENT_CONFIRMED` or `CLOSED`, otherwise **409**. `COMPLETED` is allowed so the resident can rate in the same step as confirming (PB-020).
+- One rating per ticket: a second one is **409**.
+- `score` is a whole number from 1 to 5; `comment` is trimmed, at most 500 characters.
+- Audit action `ticket.rated`, without the score. Individual ratings only ever go back to the resident (in `GET /tickets/:id`); managers see totals in analytics (PB-028, Deliverable 4).
 
 ### `GET /tickets/:id` (PB-010)
 

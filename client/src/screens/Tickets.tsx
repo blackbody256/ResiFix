@@ -430,6 +430,11 @@ function TicketView({ id }: { id: string }) {
                 <ConfirmRepair t={t} onDone={reload} />
               </div>
             )}
+            {isReporter && !t.rating && CLOSED_STATUSES.includes(t.status) && (
+              <div className="order-2">
+                <RateRepair t={t} onDone={reload} />
+              </div>
+            )}
             <div className="order-5">
               <Evidence t={t} />
             </div>
@@ -835,6 +840,7 @@ function ConfirmRepair({ t, onDone }: { t: TicketDetail; onDone: () => void }) {
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const closesAt = proof
     ? new Date(new Date(proof.createdAt).getTime() + AUTO_CLOSE_HOURS * 3_600_000).toISOString()
     : null;
@@ -845,17 +851,27 @@ function ConfirmRepair({ t, onDone }: { t: TicketDetail; onDone: () => void }) {
     if (!fixed && !comment.trim()) return setError('Tell us what is still wrong.');
     setBusy(true);
     setError('');
+    setNotice('');
+    const note = comment.trim() || undefined;
+    let rated = false;
     try {
-      const note = comment.trim() || undefined;
+      // PB-022 first, so the rating is kept even if confirming fails. Only for a fix.
+      if (fixed && score && !t.rating) {
+        await api.post(`/completion/tickets/${t.id}/rating`, { score, comment: note });
+        rated = true;
+      }
       // PB-020 (API by Selina): Fixed -> STUDENT_CONFIRMED, Still a problem -> REOPENED.
       await api.post(`/completion/tickets/${t.id}/verify`, { confirmed: fixed, comment: note });
-      // PB-022: a rating only goes with a confirmed fix.
-      if (fixed && score) {
-        await api.post(`/completion/tickets/${t.id}/rating`, { score, comment: note });
-      }
       onDone();
     } catch (err) {
-      setError(friendly(err));
+      if (rated && err instanceof ApiError && err.code === 'NOT_IMPLEMENTED') {
+        setNotice(
+          `Thanks, your rating is saved. Confirming the fix is not switched on yet, so the ticket closes automatically ${AUTO_CLOSE_HOURS} hours after the repair.`,
+        );
+      } else {
+        setError(rated ? `Your rating is saved, but: ${friendly(err)}` : friendly(err));
+      }
+      if (rated) onDone();
     } finally {
       setBusy(false);
     }
@@ -904,8 +920,19 @@ function ConfirmRepair({ t, onDone }: { t: TicketDetail; onDone: () => void }) {
 
         {fixed === true && (
           <div className="mt-4 rounded-2xl bg-surface-variant/50 p-4">
-            <p className="text-sm font-semibold">Rate the repair service</p>
-            <Stars value={score} onChange={setScore} />
+            {t.rating ? (
+              <>
+                <p className="text-sm font-semibold">You rated this repair</p>
+                <Stars value={t.rating.score} />
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold">
+                  Rate the repair service <span className="font-normal">(optional)</span>
+                </p>
+                <Stars value={score} onChange={setScore} />
+              </>
+            )}
           </div>
         )}
 
@@ -938,10 +965,76 @@ function ConfirmRepair({ t, onDone }: { t: TicketDetail; onDone: () => void }) {
         </Notice>
       )}
 
+      {notice && (
+        <Notice tone="success" icon={<CheckIcon size={18} />}>
+          {notice}
+        </Notice>
+      )}
       <ErrorText>{error}</ErrorText>
       <Button type="submit" disabled={busy || fixed === null}>
         <SendIcon size={18} /> {busy ? 'Sending…' : 'Submit confirmation'}
       </Button>
     </form>
+  );
+}
+
+/** Statuses where the repair is finished and confirmed or closed (rated on their own). */
+const CLOSED_STATUSES: TicketStatus[] = ['STUDENT_CONFIRMED', 'CLOSED'];
+
+/** PB-022: rate a finished repair that was not rated while confirming (e.g. auto-closed). */
+function RateRepair({ t, onDone }: { t: TicketDetail; onDone: () => void }) {
+  const [score, setScore] = useState(0);
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!score) return setError('Choose from 1 to 5 stars.');
+    setBusy(true);
+    setError('');
+    try {
+      await api.post(`/completion/tickets/${t.id}/rating`, {
+        score,
+        comment: comment.trim() || undefined,
+      });
+      onDone();
+    } catch (err) {
+      setError(friendly(err));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <form onSubmit={submit} className="space-y-3">
+        <div className="flex items-center gap-2">
+          <StarIcon size={20} className="text-primary" />
+          <h2 className="font-bold">Rate this repair</h2>
+        </div>
+        <p className="text-sm text-on-surface-variant">
+          How did the hall team do? Only you see your own rating; managers see totals only.
+        </p>
+        <Stars value={score} onChange={setScore} />
+        <div>
+          <label htmlFor="rate-comment" className="text-sm font-semibold">
+            Comments <span className="font-normal text-on-surface-variant">(optional)</span>
+          </label>
+          <Textarea
+            id="rate-comment"
+            rows={2}
+            maxLength={500}
+            className="mt-1"
+            placeholder="e.g. Fast response, courteous custodian."
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+          />
+        </div>
+        {error && <ErrorText>{error}</ErrorText>}
+        <Button type="submit" disabled={busy || !score}>
+          <SendIcon size={18} /> {busy ? 'Sending…' : 'Submit rating'}
+        </Button>
+      </form>
+    </Card>
   );
 }
