@@ -37,6 +37,22 @@ describe('loadConfig', () => {
     expect(loadConfig({ ...base, VAPID_PUBLIC_KEY: 'p' }).webPush).toBeNull();
   });
 
+  it('limits OTP requests by default and lets each limit be changed', () => {
+    expect(loadConfig({ ...base }).otp.requestLimit).toEqual({
+      perPhone: 5,
+      perIp: 30,
+      windowSeconds: 900,
+    });
+    const custom = loadConfig({
+      ...base,
+      OTP_REQUESTS_PER_PHONE: '2',
+      OTP_REQUESTS_PER_IP: '8',
+      OTP_REQUEST_WINDOW_SECONDS: '60',
+    });
+    expect(custom.otp.requestLimit).toEqual({ perPhone: 2, perIp: 8, windowSeconds: 60 });
+    expect(() => loadConfig({ ...base, OTP_REQUESTS_PER_PHONE: '0' })).toThrow();
+  });
+
   it('requires a database URL', () => {
     expect(() => loadConfig({})).toThrow();
   });

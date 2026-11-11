@@ -20,7 +20,7 @@ Base path: `/api`. JSON in and out. Every route needs `Authorization: Bearer <jw
 | 404    | `NOT_FOUND`         | no such record, **or it belongs to another property**                                                                                                                                    |
 | 409    | `CONFLICT`          | illegal status transition, duplicate record                                                                                                                                              |
 | 413    | `PAYLOAD_TOO_LARGE` | upload over the size limit                                                                                                                                                               |
-| 429    | `TOO_MANY_REQUESTS` | too many OTP attempts                                                                                                                                                                    |
+| 429    | `TOO_MANY_REQUESTS` | too many OTP requests or attempts; `details.retryAfterSeconds` when requests are limited (PB-002)                                                                                        |
 | 501    | `NOT_IMPLEMENTED`   | stub route, backlog item not built yet                                                                                                                                                   |
 
 - IDs are cuid strings. Timestamps are ISO 8601 UTC.
@@ -92,19 +92,77 @@ REOPENED -> REVIEWED | SCHEDULED | ASSIGNED
 | POST   | `/notifications/push/subscriptions`      | any              | `PushSubscription.toJSON()`                         | `{ subscribed: true }`                                                                                                                                                      |
 | DELETE | `/notifications/push/subscriptions`      | any              | `{ endpoint }`                                      | `{ subscribed: false }`                                                                                                                                                     |
 
+### Additional property administration endpoints
+
+| Method | Path                                             | Auth             | Request                                                                             | Response                                                                                                                                                                                 |
+| ------ | ------------------------------------------------ | ---------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/health`                                        | public           | –                                                                                   | `{ status, db, redis, time }` (503 if DB down)                                                                                                                                           |
+| POST   | `/auth/request-otp`                              | public           | `{ phone }`                                                                         | `{ phone, expiresInSeconds }`                                                                                                                                                            |
+| POST   | `/auth/verify-otp`                               | public           | `{ phone, code }`                                                                   | `{ token, user: { id, propertyId, phone, name, role } }`                                                                                                                                 |
+| GET    | `/auth/me`                                       | any              | –                                                                                   | `{ user }`                                                                                                                                                                               |
+| GET    | `/properties/mine`                               | any              | –                                                                                   | `{ property: { ..., blocks: [{ ..., rooms }] } }`                                                                                                                                        |
+| GET    | `/properties/catalogue`                          | ADMIN            | –                                                                                   | `{ categories: [{ ..., items }], responseTargets: [{ ..., category: { id, name } \| null }] }`, inactive items included (PB-029)                                                         |
+| POST   | `/properties/fault-categories`                   | ADMIN            | `{ name }` (1 to 100)                                                               | 201 `{ category }`; 409 if the name exists in the property (PB-029)                                                                                                                      |
+| PATCH  | `/properties/fault-categories/:id`               | ADMIN            | `{ name }` (1 to 100)                                                               | `{ category }`; 404, 409 if another category has the name (PB-029)                                                                                                                       |
+| DELETE | `/properties/fault-categories/:id`               | ADMIN            | –                                                                                   | `{ deleted: true, id }`; 404, 409 while it has any fault items (PB-029)                                                                                                                  |
+| POST   | `/properties/fault-categories/:categoryId/items` | ADMIN            | `{ name, defaultPriority }`                                                         | 201 `{ item }`; 404 if the category is not in the property, 409 if the name exists in the category (PB-029)                                                                              |
+| PATCH  | `/properties/fault-items/:id`                    | ADMIN            | `{ name?, defaultPriority?, isActive? }`, at least one                              | `{ item }`; 404, 409 on a duplicate name (PB-029)                                                                                                                                        |
+| POST   | `/properties/response-targets`                   | ADMIN            | `{ categoryId?, priority, respondWithinH, resolveWithinH }`                         | 201 `{ responseTarget }`; 404 unknown category, 409 duplicate (PB-029)                                                                                                                   |
+| PATCH  | `/properties/response-targets/:id`               | ADMIN            | same body as POST, all required except `categoryId`                                 | `{ responseTarget }`; 404, 409 duplicate; see below (PB-029)                                                                                                                             |
+| POST   | `/properties/blocks`                             | ADMIN            | `{ name }`                                                                          | 201 `{ block }`; 409 if the property already has a block with that name (PB-003)                                                                                                         |
+| POST   | `/properties/blocks/:blockId/rooms`              | ADMIN            | `{ number, capacity? }` (capacity 1 to 100, default 1)                              | 201 `{ room }`; 404 if the block is not in the property, 409 if the number exists in the block (PB-003)                                                                                  |
+| POST   | `/properties/occupancies`                        | ADMIN            | `{ userId, roomId }`                                                                | 201 `{ occupancy }`; 404 if the resident or room is not in the property, 409 if the resident already has a room or the room is full (PB-004)                                             |
+| GET    | `/reporting/fault-categories`                    | any              | –                                                                                   | `{ categories: [{ ..., items }] }`                                                                                                                                                       |
+| POST   | `/reporting/tickets`                             | RESIDENT         | `{ roomId, faultItemId, description? }` (description ≤ 2000 characters)             | 201 `{ ticket }` with `room.block` and `faultItem`; priority from the fault item. 404 unless `roomId` is the caller's current room, or if the fault item is not in the property (PB-005) |
+| POST   | `/reporting/tickets/:id/photos`                  | RESIDENT         | multipart, field `photo` (JPEG/PNG/WebP, ≤ 5 MB)                                    | `{ photo: { id, kind, createdAt } }`                                                                                                                                                     |
+| GET    | `/reporting/photos/:photoId/link`                | any              | –                                                                                   | `{ url, expiresAt }`: presigned link; residents: own tickets                                                                                                                             |
+| GET    | `/tickets`                                       | any              | –                                                                                   | `{ tickets }`, latest 50. Residents see only their own. Each has `room`, `faultItem.category`, `assignee { id, name }` and `nextVisit { id, scheduledAt } \| null` (PB-010)              |
+| GET    | `/tickets/:id`                                   | any              | –                                                                                   | `{ ticket }` with photos, visits, proof, `timeline` (PB-010)                                                                                                                             |
+| POST   | `/completion/tickets/:id/rating`                 | RESIDENT         | `{ score: 1..5, comment? }` (comment ≤ 500)                                         | 201 `{ rating: { score, comment, createdAt } }` (PB-022)                                                                                                                                 |
+| GET    | `/custodian/targets`                             | CUSTODIAN, ADMIN | –                                                                                   | `{ targets: [{ id, priority, category, respondWithinH, resolveWithinH }] }` (PB-012)                                                                                                     |
+| GET    | `/custodian/staff`                               | CUSTODIAN, ADMIN | –                                                                                   | `{ staff: [{ id, name }] }`: active custodians of the property, for the assign and visit pickers (PB-013)                                                                                |
+| GET    | `/custodian/queue`                               | CUSTODIAN, ADMIN | query, see below                                                                    | `{ tickets: QueueItem[], summary }` (PB-013)                                                                                                                                             |
+| POST   | `/custodian/tickets/:id/assign`                  | CUSTODIAN, ADMIN | `{ assigneeId }`                                                                    | `{ ticket: QueueItem }` (PB-013)                                                                                                                                                         |
+| POST   | `/custodian/tickets/:id/review`                  | CUSTODIAN, ADMIN | `{ faultItemId?, priority?, note? }`                                                | `{ ticket: QueueItem }` (PB-014)                                                                                                                                                         |
+| POST   | `/custodian/tickets/:id/visits`                  | CUSTODIAN, ADMIN | `{ scheduledAt, custodianId?, notes? }`                                             | 201 `{ visit, ticket: QueueItem }` (PB-015)                                                                                                                                              |
+| PATCH  | `/custodian/visits/:visitId`                     | CUSTODIAN, ADMIN | `{ scheduledAt, notes? }`                                                           | `{ visit, ticket: QueueItem }` (PB-016)                                                                                                                                                  |
+| POST   | `/visits/:visitId/change-request`                | RESIDENT         | `{ message }`                                                                       | 201 `{ changeRequest: { visitId, message, requestedAt } }` (PB-016)                                                                                                                      |
+| POST   | `/custodian/visits/:visitId/missed`              | CUSTODIAN, ADMIN | `{ reason, notes? }`                                                                | `{ visit, ticket: QueueItem }` (PB-017)                                                                                                                                                  |
+| POST   | `/custodian/tickets/:id/start`                   | CUSTODIAN, ADMIN | `{ visitId? }` (body optional)                                                      | `{ visit, ticket: QueueItem }` (PB-018)                                                                                                                                                  |
+| POST   | `/completion/tickets/:id/repair-proof`           | CUSTODIAN, ADMIN | multipart, field `photo` (JPEG/PNG/WebP, ≤ 5 MB) and `notes` (1 to 1000 characters) | 201 `{ proof: { ..., photos: [{ id, kind, createdAt }] } }`; `IN_PROGRESS` → `COMPLETED`, 409 from any other status; a custodian only on tickets assigned to them, else 403 (PB-019)     |
+| GET    | `/completion/stats`                              | ADMIN            | query `from?`, `to?`, see below                                                     | `{ range, totals, response, repair, byPriority, daily }` (PB-026)                                                                                                                        |
+| GET    | `/completion/recurring-faults`                   | ADMIN            | query `from?`, `to?`, as for stats                                                  | `{ range, totalReports, byCategory, byItem, byBlock, byRoom, byRoomFault }` (PB-027)                                                                                                     |
+| GET    | `/notifications`                                 | any              | –                                                                                   | `{ notifications, unread }`: caller's latest 50, plus the total unread count (PB-023)                                                                                                    |
+| POST   | `/notifications/:id/read`                        | any              | –                                                                                   | `{ notification }`: marks it read (first read time kept); 404 unless it is the caller's (PB-023)                                                                                         |
+| POST   | `/notifications/read-all`                        | any              | –                                                                                   | `{ updated }`: marks all the caller's unread notifications read (PB-023)                                                                                                                 |
+| GET    | `/notifications/push/public-key`                 | public           | –                                                                                   | `{ publicKey }` (null when Web Push is not configured)                                                                                                                                   |
+| POST   | `/notifications/push/subscriptions`              | any              | `PushSubscription.toJSON()`                                                         | `{ subscribed: true }`                                                                                                                                                                   |
+| DELETE | `/notifications/push/subscriptions`              | any              | `{ endpoint }`                                                                      | `{ subscribed: false }`                                                                                                                                                                  |
+
 ### Stubs (return 501 until built)
 
-| Method | Path                                   | Role             | Backlog        |
-| ------ | -------------------------------------- | ---------------- | -------------- |
-| POST   | `/properties/blocks`                   | ADMIN            | PB-003         |
-| POST   | `/properties/blocks/:blockId/rooms`    | ADMIN            | PB-003         |
-| POST   | `/properties/occupancies`              | ADMIN            | PB-004         |
-| POST   | `/reporting/tickets`                   | RESIDENT         | PB-005, PB-006 |
-| POST   | `/completion/tickets/:id/repair-proof` | CUSTODIAN, ADMIN | PB-019         |
-| POST   | `/completion/tickets/:id/verify`       | RESIDENT         | PB-020         |
-| POST   | `/completion/tickets/:id/rating`       | RESIDENT         | PB-022         |
+| Method | Path                             | Role     | Backlog |
+| ------ | -------------------------------- | -------- | ------- |
+| POST   | `/completion/tickets/:id/verify` | RESIDENT | PB-020  |
 
 Backlog IDs and titles match the ClickUp board. Stories with no stub yet add their endpoints to this file in the PR that builds them.
+
+### Code request limits (PB-002)
+
+`POST /auth/request-otp` is limited per phone number and per client IP, so nobody can run up SMS costs or try numbers to find which are registered.
+
+| Setting                      | Default | Meaning                                       |
+| ---------------------------- | ------- | --------------------------------------------- |
+| `OTP_REQUESTS_PER_PHONE`     | 5       | Requests for one number in each window        |
+| `OTP_REQUESTS_PER_IP`        | 30      | Requests from one client IP in each window    |
+| `OTP_REQUEST_WINDOW_SECONDS` | 900     | Window length; it starts at the first request |
+
+- Over either limit: **429** `TOO_MANY_REQUESTS` with `details: { retryAfterSeconds }`, and no code is created or sent.
+- Every request that passes validation counts, including ones for unregistered numbers (404). A body that fails validation (400) does not.
+- The IP is checked first; a request blocked by its IP does not count against the phone.
+- The client IP is the one Nginx forwards (`trust proxy` is 1). Keep the IP limit generous: a hostel's residents often share one Wi-Fi address.
+- Fixed windows in Redis (`resifix:otp-limit:*`). If Redis is unreachable the limit is skipped and an error is logged, so logins keep working.
+- Wrong codes are limited separately, per code: `OTP_MAX_ATTEMPTS` (default 5), then **429** until a new code is requested.
 
 ### Response targets and breach flags (PB-012)
 
@@ -210,7 +268,7 @@ A request is open while it is the latest `visit.*` audit event for its visit, so
 | `ticketBreached(ticketId)` | the `response-deadline` job, when the respond time passes | the assignee (or every custodian if none), and the admins |
 | `ticketReopened(ticketId)` | PB-020, right after a resident reopens a ticket           | the assignee (or every custodian if none), and the admins |
 
-PB-005 and PB-020 should also call `ResponseTargetsService.startClock(ticketId)` (exported by `CustodianModule`), which sets `dueAt` and schedules the breach alert.
+PB-005 and PB-020 also call `ResponseTargetsService.startClock(ticketId)` (exported by `CustodianModule`), which sets `dueAt` and schedules the breach alert. `POST /reporting/tickets` does both (clock first, so the alert says when to respond by) and returns the ticket with its `dueAt`. A failure in either is logged, not returned: the ticket is already saved and an error would make the resident report it twice. PB-020 still has to make these calls when it reopens a ticket.
 
 ### Resident updates (PB-023)
 
@@ -223,6 +281,63 @@ PB-005 and PB-020 should also call `ResponseTargetsService.startClock(ticketId)`
 | `repairCompleted(ticketId)` | PB-019, after proof of repair (`IN_PROGRESS` → `COMPLETED`)       | "Repair finished": confirm or dispute within the auto-close hours |
 
 Already sent to the resident elsewhere, so not repeated: visit booked, moved or missed, and repair started (custodian `VisitsService`), and the 48-hour auto-close (worker, PB-021).
+
+### Rate the service (PB-022)
+
+`POST /completion/tickets/:id/rating { score, comment? }`: the resident who reported the ticket rates the repair, once.
+
+- Only the reporter, in their own property: **404** for anyone else's ticket. Staff get **403**.
+- Only when the repair is done: `COMPLETED`, `STUDENT_CONFIRMED` or `CLOSED`, otherwise **409**. `COMPLETED` is allowed so the resident can rate in the same step as confirming (PB-020).
+- One rating per ticket: a second one is **409**.
+- `score` is a whole number from 1 to 5; `comment` is trimmed, at most 500 characters.
+- Audit action `ticket.rated`, without the score. Individual ratings only ever go back to the resident (in `GET /tickets/:id`); managers see totals in analytics (PB-028, Deliverable 4).
+
+### Response and repair stats (PB-026)
+
+`GET /completion/stats`: response and repair times for the caller's property, for the admin analytics screen. The property is the signed-in admin's; there is no property parameter. Custodians and residents get 403.
+
+| Query  | Example                     | Meaning                                                                              |
+| ------ | --------------------------- | ------------------------------------------------------------------------------------ |
+| `from` | `2026-11-01T00:00:00+03:00` | Optional. ISO 8601 date-time with `Z` or an offset. Tickets reported at or after it. |
+| `to`   | `2026-11-08T00:00:00+03:00` | Optional. Same format. Tickets reported before it (exclusive).                       |
+
+With neither, every ticket of the property is counted. A plain date such as `2026-11-01` is a 400 `VALIDATION_FAILED`; `from` not before `to` is a 400 `BAD_REQUEST`.
+
+- The range selects tickets by when they were reported. Their response and repair count even when they happened after `to`.
+- Both clocks start at the report, or at the last reopen. Response ends at the first custodian arrival (`visit.arrivedAt`) and repair at the first completion (audit `ticket.repair_completed`, or else the first repair proof); each counts only when it falls after the clock start. Only the first arrival and first completion are looked at, so a reopened ticket whose first visit came before the reopen shows no response or repair time for its second round.
+- `withinTarget` compares against the ticket's response target (`respondWithinH`, `resolveWithinH`). A ticket with no matching target counts as within target.
+
+Response:
+
+- `range { from, to }`: ISO strings, or `null` when not given
+- `totals { reported, responded, completed }`: ticket counts
+- `response`, `repair`: `{ sampleSize, averageMinutes, medianMinutes, withinTarget, overdue }`. Minutes are whole numbers; averages and medians are `null` with no data.
+- `byPriority`: always four entries, `URGENT`, `HIGH`, `MEDIUM`, `LOW`, each `{ priority, reported, responded, completed, averageResponseMinutes, averageRepairMinutes }`
+- `daily`: one entry per day with reports, oldest first, `{ date, reported, responded, completed, averageResponseMinutes, averageRepairMinutes }`. `date` is `YYYY-MM-DD` in UTC, not Kampala time.
+
+### Recurring faults (PB-027)
+
+`GET /completion/recurring-faults`: how often each fault is reported, for the admin analytics screen. Same caller rules, `from` and `to` query and 400s as `GET /completion/stats`: tickets are selected by when they were reported, and every status counts.
+
+Response:
+
+- `range { from, to }`: ISO strings, or `null` when not given
+- `totalReports`: tickets in the range
+- `byCategory`, `byItem`, `byBlock`, `byRoom`: `[{ id, name, group, reports, lastReportedAt }]`. `group` is the category name for items, the block name for rooms, and `null` for categories and blocks. For rooms, `name` is the room number.
+- `byRoomFault`: one entry per room and fault item, `[{ id, room, block, faultItem, category, reports, lastReportedAt }]`; `id` is `<roomId>:<faultItemId>`.
+- Every list is sorted by `reports`, most first, then by the latest report. Lists are not cut off and include entries with a single report; the client decides what counts as recurring.
+
+### Fault catalogue and response targets (PB-029)
+
+Admin-only management of the property's fault categories, fault items and response targets. Everything is scoped to the caller's property: an id from another property is a **404**. These routes write no audit entries.
+
+- `GET /properties/catalogue` returns every category (by name) with all its items (by name), active or not, and every response target (by priority, then category), each with `category { id, name }`, or `null` for a property-wide target.
+- Names are trimmed, 1 to 100 characters, and unique within the property (categories) or within the category (items); the comparison is case-sensitive.
+- `DELETE /properties/fault-categories/:id` is a **409** while the category has any fault items, active or not. Deactivate items with `PATCH /properties/fault-items/:id { isActive: false }` to drop them from the resident's list (`GET /reporting/fault-categories`) while keeping their ticket history; there is no route to delete an item. Quirk: `POST /reporting/tickets` does not check `isActive`, so a client that still holds an inactive item's id can report against it.
+- `defaultPriority` is `URGENT`, `HIGH`, `MEDIUM` or `LOW`. Changing it affects new reports only.
+- Response targets: `categoryId` `null` or left out means property-wide for that priority. `respondWithinH` and `resolveWithinH` are whole hours, 1 to 8760; the code does not require respond to be shorter than resolve. One target per category and priority (**409**).
+- `PATCH /properties/response-targets/:id` needs the full body (`priority`, `respondWithinH`, `resolveWithinH`). Quirk: leaving out `categoryId` keeps the target's current category, but the duplicate check is then made against the property-wide target for that priority. Send `categoryId` explicitly (an id, or `null`) when updating.
+- Changing a target does not move `dueAt` on open tickets; it applies from the next time a clock starts (`startClock`).
 
 ### `GET /tickets/:id` (PB-010)
 

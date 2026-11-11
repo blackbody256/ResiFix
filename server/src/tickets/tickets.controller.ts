@@ -1,9 +1,9 @@
 // OWNER: Ayan
 // TODO:
 //   [x] PB-010  my tickets list (and the ticket detail)
-//   [ ] PB-011  ticket timeline: shown in the detail, built from the audit log
+//   [x] PB-011  ticket timeline: shown in the detail, built from the audit log
 //   [ ] PB-020  UI for resident verification (API: Selina, POST /completion/tickets/:id/verify)
-//   [ ] PB-022  rate the service (endpoint stub: POST /completion/tickets/:id/rating)
+//   [x] PB-022  rate the service: POST /completion/tickets/:id/rating (completion/rating.service.ts)
 //   [ ] PB-023  student notifications on ticket updates: NotificationsService.notify()
 //               inbox + ResidentUpdatesService done; PB-013/PB-014/PB-019 still to call it
 // Status changes happen in the endpoint of the story that makes them (review, schedule, proof,
