@@ -27,6 +27,10 @@ const EnvSchema = z.object({
     .default('123456'),
   OTP_TTL_SECONDS: z.coerce.number().int().positive().default(300),
   OTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
+  // PB-002: code requests allowed per phone and per client IP in each window.
+  OTP_REQUESTS_PER_PHONE: z.coerce.number().int().positive().default(5),
+  OTP_REQUESTS_PER_IP: z.coerce.number().int().positive().default(30),
+  OTP_REQUEST_WINDOW_SECONDS: z.coerce.number().int().positive().default(900),
 
   REDIS_URL: z.string().default('redis://localhost:6379'),
   RUN_WORKER_INLINE: bool.default(true),
@@ -72,6 +76,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       devCode: isProd ? null : e.OTP_DEV_CODE,
       ttlSeconds: e.OTP_TTL_SECONDS,
       maxAttempts: e.OTP_MAX_ATTEMPTS,
+      requestLimit: {
+        perPhone: e.OTP_REQUESTS_PER_PHONE,
+        perIp: e.OTP_REQUESTS_PER_IP,
+        windowSeconds: e.OTP_REQUEST_WINDOW_SECONDS,
+      },
     },
     redis: { url: e.REDIS_URL },
     worker: { inline: e.RUN_WORKER_INLINE, autoCloseHours: e.AUTO_CLOSE_HOURS },
