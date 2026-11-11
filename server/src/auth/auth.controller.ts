@@ -1,8 +1,8 @@
 // OWNER: Ann
 // TODO:
 //   [ ] PB-001  phone + OTP login: dev flow done; resident self-registration
-//   [ ] PB-002  sessions/roles: JWT + RolesGuard done; rate-limit request-otp
-import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
+//   [x] PB-002  sessions/roles: JWT + RolesGuard; request-otp limited per phone and per IP
+import { Body, Controller, Get, HttpCode, Ip, Post } from '@nestjs/common';
 import { z } from 'zod';
 import { CurrentUser, Public } from '../common/decorators';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -18,12 +18,18 @@ const VerifyBody = PhoneBody.extend({
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
-  /** POST /api/auth/request-otp { phone } -> { phone, expiresInSeconds } */
+  /**
+   * POST /api/auth/request-otp { phone } -> { phone, expiresInSeconds }
+   * 429 TOO_MANY_REQUESTS past the per-phone or per-IP limit (PB-002).
+   */
   @Public()
   @Post('request-otp')
   @HttpCode(200)
-  requestOtp(@Body(new ZodValidationPipe(PhoneBody)) body: z.infer<typeof PhoneBody>) {
-    return this.auth.requestOtp(body.phone);
+  requestOtp(
+    @Body(new ZodValidationPipe(PhoneBody)) body: z.infer<typeof PhoneBody>,
+    @Ip() ip: string | undefined,
+  ) {
+    return this.auth.requestOtp(body.phone, ip);
   }
 
   /** POST /api/auth/verify-otp { phone, code } -> { token, user } */

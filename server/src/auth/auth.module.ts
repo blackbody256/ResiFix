@@ -9,6 +9,7 @@ import { PropertyScopeGuard } from '../common/guards/property-scope.guard';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { OtpRateLimitService } from './otp-rate-limit.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 
@@ -26,6 +27,7 @@ import { RolesGuard } from './guards/roles.guard';
   controllers: [AuthController],
   providers: [
     AuthService,
+    OtpRateLimitService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: PropertyScopeGuard },
