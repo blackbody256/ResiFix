@@ -287,24 +287,26 @@ export class CompletionService {
         ticket.createdAt,
         ticket.faultItem.category.name,
       );
-      this.increment(blocks, ticket.room.block.id, ticket.room.block.name, ticket.createdAt);
-      this.increment(
-        rooms,
-        ticket.room.id,
-        ticket.room.number,
-        ticket.createdAt,
-        ticket.room.block.name,
-      );
-      this.incrementRoomFault(
-        roomFaults,
-        ticket.room.id,
-        ticket.room.number,
-        ticket.room.block.name,
-        ticket.faultItem.id,
-        ticket.faultItem.name,
-        ticket.faultItem.category.name,
-        ticket.createdAt,
-      );
+      if (ticket.room) {
+        this.increment(blocks, ticket.room.block.id, ticket.room.block.name, ticket.createdAt);
+        this.increment(
+          rooms,
+          ticket.room.id,
+          ticket.room.number,
+          ticket.createdAt,
+          ticket.room.block.name,
+        );
+        this.incrementRoomFault(
+          roomFaults,
+          ticket.room.id,
+          ticket.room.number,
+          ticket.room.block.name,
+          ticket.faultItem.id,
+          ticket.faultItem.name,
+          ticket.faultItem.category.name,
+          ticket.createdAt,
+        );
+      }
     }
 
     return {

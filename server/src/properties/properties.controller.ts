@@ -20,6 +20,10 @@ const CreateOccupancyBody = z.object({
   userId: z.string().trim().min(1),
   roomId: z.string().trim().min(1),
 });
+const CreateFacilityBody = z.object({
+  name: z.string().trim().min(1).max(100),
+  location: z.string().trim().max(200).nullable().optional(),
+});
 const CategoryBody = z.object({ name: z.string().trim().min(1).max(100) });
 const ItemBody = z.object({
   name: z.string().trim().min(1).max(100),
