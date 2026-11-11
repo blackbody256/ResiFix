@@ -8,6 +8,7 @@ import { AuditService } from '../common/audit.service';
 import { notFound, tooManyRequests, unauthorized } from '../common/app-exception';
 import { SmsService } from '../notifications/sms.service';
 import { AUTH_USER_SELECT, type AuthUser } from './auth-user';
+import { OtpRateLimitService } from './otp-rate-limit.service';
 import { normalizePhone } from './phone';
 
 const hash = (code: string) => createHash('sha256').update(code).digest('hex');
@@ -28,10 +29,13 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly audit: AuditService,
     private readonly sms: SmsService,
+    private readonly rateLimit: OtpRateLimitService,
   ) {}
 
-  async requestOtp(rawPhone: string) {
+  async requestOtp(rawPhone: string, ip?: string) {
     const phone = normalizePhone(rawPhone);
+    // Before the user lookup, so unregistered numbers count too and cannot be probed freely.
+    await this.rateLimit.assertAllowed(phone, ip);
 
     // TODO(PB-001): resident self-registration. For now only seeded/admin-created users log in.
     const user = await this.prisma.user.findUnique({ where: { phone } });
