@@ -2,8 +2,8 @@
 // TODO:
 //   [x] PB-003  blocks and rooms management
 //   [x] PB-004  occupancy (resident <-> room)
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
-import { Prisma, Role } from '@prisma/client';
+import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Prisma, Priority, Role } from '@prisma/client';
 import { z } from 'zod';
 import { conflict, notFound } from '../common/app-exception';
 import { Roles, Scope } from '../common/decorators';
@@ -20,6 +20,21 @@ const CreateOccupancyBody = z.object({
   userId: z.string().trim().min(1),
   roomId: z.string().trim().min(1),
 });
+const CategoryBody = z.object({ name: z.string().trim().min(1).max(100) });
+const ItemBody = z.object({
+  name: z.string().trim().min(1).max(100),
+  defaultPriority: z.enum(Object.values(Priority) as [Priority, ...Priority[]]),
+});
+const ItemUpdateBody = ItemBody.partial().extend({ isActive: z.boolean().optional() }).refine(
+  (body) => Object.keys(body).length > 0,
+  'Provide at least one field to update',
+);
+const TargetBody = z.object({
+  categoryId: z.string().trim().min(1).nullable().optional(),
+  priority: z.enum(Object.values(Priority) as [Priority, ...Priority[]]),
+  respondWithinH: z.number().int().min(1).max(8760),
+  resolveWithinH: z.number().int().min(1).max(8760),
+});
 
 @Controller('properties')
 export class PropertiesController {
@@ -35,6 +50,176 @@ export class PropertiesController {
       },
     });
     return { property };
+  }
+
+  @Get('catalogue')
+  @Roles(Role.ADMIN)
+  async catalogue(@Scope() scope: PropertyScope) {
+    const [categories, responseTargets] = await Promise.all([
+      this.prisma.faultCategory.findMany({
+        where: scope.where<Prisma.FaultCategoryWhereInput>(),
+        orderBy: { name: 'asc' },
+        include: { items: { orderBy: { name: 'asc' } } },
+      }),
+      this.prisma.responseTarget.findMany({
+        where: scope.where<Prisma.ResponseTargetWhereInput>(),
+        orderBy: [{ priority: 'asc' }, { categoryId: 'asc' }],
+        include: { category: { select: { id: true, name: true } } },
+      }),
+    ]);
+    return { categories, responseTargets };
+  }
+
+  @Post('fault-categories')
+  @Roles(Role.ADMIN)
+  async createCategory(
+    @Body(new ZodValidationPipe(CategoryBody)) body: z.infer<typeof CategoryBody>,
+    @Scope() scope: PropertyScope,
+  ) {
+    const existing = await this.prisma.faultCategory.findFirst({
+      where: scope.where<Prisma.FaultCategoryWhereInput>({ name: body.name }),
+    });
+    if (existing) throw conflict('A fault category with this name already exists');
+    try {
+      return {
+        category: await this.prisma.faultCategory.create({ data: scope.data({ name: body.name }) }),
+      };
+    } catch (error) {
+      if (isUniqueError(error)) throw conflict('A fault category with this name already exists');
+      throw error;
+    }
+  }
+
+  @Patch('fault-categories/:id')
+  @Roles(Role.ADMIN)
+  async renameCategory(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(CategoryBody)) body: z.infer<typeof CategoryBody>,
+    @Scope() scope: PropertyScope,
+  ) {
+    const category = await this.prisma.faultCategory.findFirst({ where: scope.where({ id }) });
+    if (!category) throw notFound('Fault category not found');
+    const duplicate = await this.prisma.faultCategory.findFirst({
+      where: scope.where({ name: body.name, id: { not: id } }),
+    });
+    if (duplicate) throw conflict('A fault category with this name already exists');
+    return { category: await this.prisma.faultCategory.update({ where: { id }, data: body }) };
+  }
+
+  @Delete('fault-categories/:id')
+  @Roles(Role.ADMIN)
+  async deleteCategory(@Param('id') id: string, @Scope() scope: PropertyScope) {
+    const category = await this.prisma.faultCategory.findFirst({
+      where: scope.where({ id }),
+      include: { _count: { select: { items: true } } },
+    });
+    if (!category) throw notFound('Fault category not found');
+    if (category._count.items > 0) {
+      throw conflict('This category still has fault items. Remove or deactivate them first.');
+    }
+
+    const ticketCount = await this.prisma.ticket.count({
+      where: {
+        faultItem: { categoryId: id, category: { propertyId: scope.propertyId } },
+      },
+    });
+    if (ticketCount > 0) {
+      throw conflict('This category has ticket history and cannot be deleted. Rename it instead.');
+    }
+
+    await this.prisma.faultCategory.delete({ where: { id } });
+    return { deleted: true, id };
+  }
+
+  @Post('fault-categories/:categoryId/items')
+  @Roles(Role.ADMIN)
+  async createItem(
+    @Param('categoryId') categoryId: string,
+    @Body(new ZodValidationPipe(ItemBody)) body: z.infer<typeof ItemBody>,
+    @Scope() scope: PropertyScope,
+  ) {
+    const category = await this.prisma.faultCategory.findFirst({ where: scope.where({ id: categoryId }) });
+    if (!category) throw notFound('Fault category not found');
+    const existing = await this.prisma.faultItem.findFirst({ where: { categoryId, name: body.name } });
+    if (existing) throw conflict('A fault item with this name already exists in this category');
+    try {
+      return { item: await this.prisma.faultItem.create({ data: { categoryId, ...body } }) };
+    } catch (error) {
+      if (isUniqueError(error)) throw conflict('A fault item with this name already exists in this category');
+      throw error;
+    }
+  }
+
+  @Patch('fault-items/:id')
+  @Roles(Role.ADMIN)
+  async updateItem(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(ItemUpdateBody)) body: z.infer<typeof ItemUpdateBody>,
+    @Scope() scope: PropertyScope,
+  ) {
+    const item = await this.prisma.faultItem.findFirst({
+      where: scope.where<Prisma.FaultItemWhereInput>({ id }, 'category'),
+    });
+    if (!item) throw notFound('Fault item not found');
+    if (body.name && body.name !== item.name) {
+      const duplicate = await this.prisma.faultItem.findFirst({
+        where: { categoryId: item.categoryId, name: body.name, id: { not: id } },
+      });
+      if (duplicate) throw conflict('A fault item with this name already exists in this category');
+    }
+    return { item: await this.prisma.faultItem.update({ where: { id }, data: body }) };
+  }
+
+  @Post('response-targets')
+  @Roles(Role.ADMIN)
+  async createTarget(
+    @Body(new ZodValidationPipe(TargetBody)) body: z.infer<typeof TargetBody>,
+    @Scope() scope: PropertyScope,
+  ) {
+    await this.assertCategory(body.categoryId, scope);
+    await this.assertTargetAvailable(body.categoryId ?? null, body.priority, scope);
+    try {
+      return {
+        responseTarget: await this.prisma.responseTarget.create({
+          data: scope.data({ ...body, categoryId: body.categoryId ?? null }),
+        }),
+      };
+    } catch (error) {
+      if (isUniqueError(error)) throw conflict('A response target already exists for this priority and category');
+      throw error;
+    }
+  }
+
+  @Patch('response-targets/:id')
+  @Roles(Role.ADMIN)
+  async updateTarget(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(TargetBody)) body: z.infer<typeof TargetBody>,
+    @Scope() scope: PropertyScope,
+  ) {
+    const target = await this.prisma.responseTarget.findFirst({ where: scope.where({ id }) });
+    if (!target) throw notFound('Response target not found');
+    await this.assertCategory(body.categoryId, scope);
+    await this.assertTargetAvailable(body.categoryId ?? null, body.priority, scope, id);
+    return { responseTarget: await this.prisma.responseTarget.update({ where: { id }, data: body }) };
+  }
+
+  private async assertCategory(categoryId: string | null | undefined, scope: PropertyScope) {
+    if (categoryId === null || categoryId === undefined) return;
+    const category = await this.prisma.faultCategory.findFirst({ where: scope.where({ id: categoryId }) });
+    if (!category) throw notFound('Fault category not found');
+  }
+
+  private async assertTargetAvailable(
+    categoryId: string | null,
+    priority: Priority,
+    scope: PropertyScope,
+    exceptId?: string,
+  ) {
+    const existing = await this.prisma.responseTarget.findFirst({
+      where: scope.where({ categoryId, priority, ...(exceptId && { id: { not: exceptId } }) }),
+    });
+    if (existing) throw conflict('A response target already exists for this priority and category');
   }
 
   @Post('blocks')
@@ -121,4 +306,8 @@ export class PropertiesController {
     });
     return { occupancy };
   }
+}
+
+function isUniqueError(error: unknown): error is Prisma.PrismaClientKnownRequestError {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }
