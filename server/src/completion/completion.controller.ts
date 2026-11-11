@@ -50,6 +50,15 @@ export class CompletionController {
     return this.completion.stats(query, scope);
   }
 
+  @Get('recurring-faults')
+  @Roles(Role.ADMIN)
+  recurringFaults(
+    @Query(new ZodValidationPipe(StatsQuery)) query: StatsQuery,
+    @Scope() scope: PropertyScope,
+  ) {
+    return this.completion.recurringFaults(query, scope);
+  }
+
   @Post('tickets/:id/repair-proof')
   @Roles(Role.CUSTODIAN, Role.ADMIN)
   @UseInterceptors(FileInterceptor('photo', { limits: { fileSize: 5 * 1024 * 1024, files: 1 } }))
