@@ -25,10 +25,9 @@ const ItemBody = z.object({
   name: z.string().trim().min(1).max(100),
   defaultPriority: z.enum(Object.values(Priority) as [Priority, ...Priority[]]),
 });
-const ItemUpdateBody = ItemBody.partial().extend({ isActive: z.boolean().optional() }).refine(
-  (body) => Object.keys(body).length > 0,
-  'Provide at least one field to update',
-);
+const ItemUpdateBody = ItemBody.partial()
+  .extend({ isActive: z.boolean().optional() })
+  .refine((body) => Object.keys(body).length > 0, 'Provide at least one field to update');
 const TargetBody = z.object({
   categoryId: z.string().trim().min(1).nullable().optional(),
   priority: z.enum(Object.values(Priority) as [Priority, ...Priority[]]),
@@ -138,14 +137,19 @@ export class PropertiesController {
     @Body(new ZodValidationPipe(ItemBody)) body: z.infer<typeof ItemBody>,
     @Scope() scope: PropertyScope,
   ) {
-    const category = await this.prisma.faultCategory.findFirst({ where: scope.where({ id: categoryId }) });
+    const category = await this.prisma.faultCategory.findFirst({
+      where: scope.where({ id: categoryId }),
+    });
     if (!category) throw notFound('Fault category not found');
-    const existing = await this.prisma.faultItem.findFirst({ where: { categoryId, name: body.name } });
+    const existing = await this.prisma.faultItem.findFirst({
+      where: { categoryId, name: body.name },
+    });
     if (existing) throw conflict('A fault item with this name already exists in this category');
     try {
       return { item: await this.prisma.faultItem.create({ data: { categoryId, ...body } }) };
     } catch (error) {
-      if (isUniqueError(error)) throw conflict('A fault item with this name already exists in this category');
+      if (isUniqueError(error))
+        throw conflict('A fault item with this name already exists in this category');
       throw error;
     }
   }
@@ -185,7 +189,8 @@ export class PropertiesController {
         }),
       };
     } catch (error) {
-      if (isUniqueError(error)) throw conflict('A response target already exists for this priority and category');
+      if (isUniqueError(error))
+        throw conflict('A response target already exists for this priority and category');
       throw error;
     }
   }
@@ -201,12 +206,16 @@ export class PropertiesController {
     if (!target) throw notFound('Response target not found');
     await this.assertCategory(body.categoryId, scope);
     await this.assertTargetAvailable(body.categoryId ?? null, body.priority, scope, id);
-    return { responseTarget: await this.prisma.responseTarget.update({ where: { id }, data: body }) };
+    return {
+      responseTarget: await this.prisma.responseTarget.update({ where: { id }, data: body }),
+    };
   }
 
   private async assertCategory(categoryId: string | null | undefined, scope: PropertyScope) {
     if (categoryId === null || categoryId === undefined) return;
-    const category = await this.prisma.faultCategory.findFirst({ where: scope.where({ id: categoryId }) });
+    const category = await this.prisma.faultCategory.findFirst({
+      where: scope.where({ id: categoryId }),
+    });
     if (!category) throw notFound('Fault category not found');
   }
 

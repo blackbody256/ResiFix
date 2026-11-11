@@ -81,7 +81,10 @@ describe('PB-029 category and response-target administration', () => {
       .expect(200);
     expect(updated.body.item).toMatchObject({ isActive: false, defaultPriority: Priority.HIGH });
 
-    await t.as(home.admin).delete(`/properties/fault-categories/${home.categories.Plumbing.id}`).expect(409);
+    await t
+      .as(home.admin)
+      .delete(`/properties/fault-categories/${home.categories.Plumbing.id}`)
+      .expect(409);
 
     await t
       .as(away.admin)
