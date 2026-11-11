@@ -1,16 +1,17 @@
 // OWNER: Andrew
-// TODO:
-//   [ ] PB-012  response targets by category; flag overdue tickets
+// Stories (all built; tests in test/custodian-*.e2e-spec.ts and test/report-alerts.e2e-spec.ts):
+//   [x] PB-012  response targets by category; flag overdue tickets
 //               GET /targets; ResponseTargetsService.startClock() sets dueAt + schedules the alert
-//   [ ] PB-013  prioritised work queue: urgency and least time remaining, search and filter
-//   [ ] PB-014  review and correct the ticket category (REPORTED -> REVIEWED);
+//   [x] PB-013  prioritised work queue: urgency and least time remaining, search and filter
+//   [x] PB-014  review and correct the ticket category (REPORTED -> REVIEWED);
 //               then TicketTimersService.scheduleResponseDeadline()
-//   [ ] PB-015  schedule a repair visit inside the resident's availability; notify the resident
-//   [ ] PB-016  resident requests another time for a scheduled visit
-//   [ ] PB-017  record a missed visit; the ticket stays open for rescheduling
-//   [ ] PB-018  mark work in progress
-//   [ ] PB-024  custodian alerts for new, breached and reopened tickets: CustodianAlertsService
-//               (notifications module); breach alerts come from the response-deadline job
+//   [x] PB-015  schedule a repair visit inside the resident's availability; notify the resident
+//   [x] PB-016  resident requests another time for a scheduled visit
+//   [x] PB-017  record a missed visit; the ticket stays open for rescheduling
+//   [x] PB-018  mark work in progress
+//   [x] PB-024  custodian alerts for new, breached and reopened tickets: CustodianAlertsService
+//               (notifications module); breach alerts come from the response-deadline job;
+//               the reopened alert fires once PB-020 (verify) calls ticketReopened()
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { z } from 'zod';

@@ -6,6 +6,7 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import type { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import type { User } from '@prisma/client';
 import type { Queue } from 'bullmq';
@@ -37,8 +38,9 @@ export interface ApiClient {
 
 export async function startApp(): Promise<TestApp> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-  const app = moduleRef.createNestApplication({ logger: ['error'] });
+  const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: ['error'] });
   app.setGlobalPrefix('api');
+  app.set('trust proxy', 1); // as in main.ts, so tests can set the client IP with X-Forwarded-For
   await app.init();
 
   const server = app.getHttpServer();

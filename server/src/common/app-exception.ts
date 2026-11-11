@@ -23,8 +23,8 @@ export const notFound = (message = 'Not found') =>
   new AppException(HttpStatus.NOT_FOUND, 'NOT_FOUND', message);
 export const conflict = (message: string) =>
   new AppException(HttpStatus.CONFLICT, 'CONFLICT', message);
-export const tooManyRequests = (message: string) =>
-  new AppException(HttpStatus.TOO_MANY_REQUESTS, 'TOO_MANY_REQUESTS', message);
+export const tooManyRequests = (message: string, details?: unknown) =>
+  new AppException(HttpStatus.TOO_MANY_REQUESTS, 'TOO_MANY_REQUESTS', message, details);
 
 /** Body for routes whose backlog item is not built yet. */
 export function notImplemented(backlogId: string): never {

@@ -22,8 +22,10 @@ describe('PB-023 student notifications', () => {
     await t.close();
   });
 
-  const note = (user: User, message: string, readAt: Date | null = null) =>
-    t.prisma.notification.create({ data: { userId: user.id, message, readAt } });
+  // `createdAt` is set by the tests that check the order: rows created back to back can share a
+  // millisecond, and then the database may return them either way round.
+  const note = (user: User, message: string, readAt: Date | null = null, createdAt?: Date) =>
+    t.prisma.notification.create({ data: { userId: user.id, message, readAt, createdAt } });
 
   describe('inbox', () => {
     let resident: User;
@@ -32,9 +34,10 @@ describe('PB-023 student notifications', () => {
     });
 
     it('lists only the caller’s notifications, newest first, with the unread count', async () => {
-      await note(resident, 'Old: read already', new Date(Date.now() - 60_000));
-      await note(resident, 'First: unread');
-      await note(resident, 'Second: unread');
+      const now = Date.now();
+      await note(resident, 'Old: read already', new Date(now - 60_000), new Date(now - 120_000));
+      await note(resident, 'First: unread', null, new Date(now - 60_000));
+      await note(resident, 'Second: unread', null, new Date(now));
       await note(home.residents[1], 'Neighbour: not yours');
 
       const res = await t.as(resident).get('/notifications').expect(200);
