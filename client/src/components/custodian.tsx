@@ -7,12 +7,13 @@ import {
   NEXT_STEP,
   type PillTone,
   type QueueItem,
+  STAFF_STATUS,
   type Target,
   targetPill,
 } from '../lib/custodian';
-import { priorityLabel, ticketRef, type Priority } from '../lib/tickets';
+import { priorityLabel, ticketRef, type Priority, type TicketStatus } from '../lib/tickets';
 import { AlertIcon, CalendarIcon, ChevronRightIcon } from './icons';
-import { CategoryTile, StatusPill } from './tickets';
+import { CategoryTile } from './tickets';
 
 /** White card with the console's 8px corners. */
 export function Panel({
@@ -28,7 +29,17 @@ export function Panel({
 }
 
 export type TileTone =
-  'green' | 'dark' | 'mint' | 'lime' | 'cream' | 'pink' | 'red' | 'peach' | 'beige';
+  | 'green'
+  | 'dark'
+  | 'mint'
+  | 'lime'
+  | 'cream'
+  | 'pink'
+  | 'red'
+  | 'peach'
+  | 'beige'
+  | 'olive'
+  | 'sage';
 const TILE: Record<TileTone, string> = {
   green: 'bg-console-green-tile text-on-primary',
   dark: 'bg-primary text-on-primary',
@@ -39,6 +50,8 @@ const TILE: Record<TileTone, string> = {
   red: 'bg-tertiary-container text-tertiary',
   peach: 'bg-console-peach text-console-peach-ink',
   beige: 'bg-surface-variant text-console-nav',
+  olive: 'bg-secondary text-on-secondary',
+  sage: 'bg-secondary-container text-on-secondary-container',
 };
 
 /** Rounded square holding an icon. */
@@ -125,6 +138,31 @@ export function Pill({
   );
 }
 
+/** The ticket's status in staff words ("Awaiting sign-off", not the resident's "Confirm repair"). */
+export function StaffStatusPill({
+  status,
+  icon,
+  className = '',
+}: {
+  status: TicketStatus;
+  icon?: ReactNode;
+  className?: string;
+}) {
+  const meta = STAFF_STATUS[status];
+  return (
+    <span
+      className={cx(
+        'inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap',
+        meta?.pill ?? 'bg-surface text-console-nav',
+        className,
+      )}
+    >
+      {icon ?? <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" aria-hidden />}
+      {meta?.label ?? status}
+    </span>
+  );
+}
+
 /** PB-012: the response target as the design's status pill. */
 export function TargetBadge({
   target,
@@ -162,7 +200,8 @@ function attentionFlags(item: QueueItem): { key: string; text: string; icon: Rea
   if (item.next === 'RESCHEDULE' && item.lastMissedVisit) {
     flags.push({ key: 'missed', text: 'Last visit missed', icon: <AlertIcon size={12} /> });
   }
-  if (item.reopenCount > 0) {
+  // A REOPENED status already says so; the flag is for reopened tickets further along.
+  if (item.reopenCount > 0 && item.status !== 'REOPENED') {
     flags.push({ key: 'reopened', text: 'Reopened', icon: <AlertIcon size={12} /> });
   }
   return flags.slice(0, 2);
@@ -233,7 +272,7 @@ export function QueueCard({
             {item.room.block.name} · Room {item.room.number}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <StatusPill status={item.status} />
+            <StaffStatusPill status={item.status} />
             {item.priority !== 'MEDIUM' && <PriorityBadge priority={item.priority} />}
             <Flags item={item} />
           </div>

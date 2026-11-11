@@ -117,7 +117,7 @@ export function CustodianDashboard() {
       {summary && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
           <Stat
-            to="/custodian?view=review"
+            to="/custodian?status=REPORTED,REOPENED"
             label="New complaints"
             icon={<InboxIcon size={16} />}
             tile="mint"
@@ -139,7 +139,7 @@ export function CustodianDashboard() {
             foot={<Progress value={onTrackToday} total={dueToday.length} />}
           />
           <Stat
-            to="/custodian?view=overdue"
+            to="/custodian?state=OVERDUE"
             label="Breached SLA"
             labelClass="text-console-red"
             icon={<RotateIcon size={16} />}
@@ -165,7 +165,7 @@ export function CustodianDashboard() {
             }
           />
           <Stat
-            to="/custodian?view=resident"
+            to="/custodian?status=COMPLETED"
             label="Awaiting confirmation"
             labelClass="text-primary"
             icon={<CheckCircleIcon size={16} />}
@@ -201,7 +201,7 @@ export function CustodianDashboard() {
                       ? `${toReview.length} report${toReview.length === 1 ? '' : 's'} waiting for review`
                       : 'Nothing waiting for review'
                   }
-                  to="/custodian?view=review"
+                  to="/custodian?status=REPORTED,REOPENED"
                 />
                 <OpRow
                   tile="beige"
