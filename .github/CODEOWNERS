@@ -1,0 +1,7 @@
+# Shared files that change only by PR to Ann (see CONTRIBUTING.md, "Shared files").
+# GitHub requests Ann's review on any PR touching these paths. This file does not block a merge
+# on its own; that needs "Require review from Code Owners" in branch protection.
+
+/prisma/                @Karagwa
+/docs/api-contract.md   @Karagwa
+/.github/               @Karagwa
