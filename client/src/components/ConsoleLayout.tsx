@@ -227,17 +227,19 @@ export function ConsoleLayout() {
         <div className="hidden items-center gap-3 px-5 py-2.5 lg:flex">
           <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 text-sm">
             <BuildingIcon size={16} className="shrink-0 text-console-faint" />
-            <span className="text-console-faint">Estates operations</span>
-            <span className="text-console-faint">/</span>
+            <span className="hidden whitespace-nowrap text-console-faint xl:inline">
+              Estates operations
+            </span>
+            <span className="hidden text-console-faint xl:inline">/</span>
             <span className="truncate font-bold text-console-ink">{page}</span>
           </nav>
           {propertyName && (
-            <span className="ml-2 flex items-center gap-2 rounded-console border border-outline-variant/70 bg-console-card px-3 py-1.5 text-sm font-semibold text-console-ink">
-              <BuildingIcon size={15} className="text-primary" />
-              {propertyName}
+            <span className="ml-2 flex max-w-56 min-w-0 shrink items-center gap-2 rounded-console border border-outline-variant/70 bg-console-card px-3 py-1.5 text-sm font-semibold whitespace-nowrap text-console-ink">
+              <BuildingIcon size={15} className="shrink-0 text-primary" />
+              <span className="truncate">{propertyName}</span>
             </span>
           )}
-          <span className="ml-auto flex items-center gap-2 rounded-full bg-console-card px-3 py-1 text-xs font-semibold text-console-nav">
+          <span className="ml-auto flex shrink-0 items-center gap-2 rounded-full bg-console-card px-3 py-1 text-xs font-semibold whitespace-nowrap text-console-nav">
             <span
               className={cx('h-2 w-2 rounded-full', online ? 'bg-success' : 'bg-tertiary')}
               aria-hidden
@@ -251,7 +253,7 @@ export function ConsoleLayout() {
           >
             {avatar}
             <span className="text-left">
-              <span className="block text-sm leading-tight font-bold text-console-ink">
+              <span className="block text-sm leading-tight font-bold whitespace-nowrap text-console-ink">
                 {user.name}
               </span>
               <span className="text-xs text-console-faint">{role}</span>

@@ -87,3 +87,34 @@ export const RotateIcon = make(
     <path d="M21 3v5h-5" />
   </>,
 );
+
+export const HourglassIcon = make(
+  <>
+    <path d="M5 22h14M5 2h14" />
+    <path d="M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22" />
+    <path d="M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2" />
+  </>,
+);
+
+export const DownloadIcon = make(
+  <>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <path d="m7 10 5 5 5-5" />
+    <path d="M12 15V3" />
+  </>,
+);
+
+export const ListIcon = make(
+  <>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M3 10h18M3 15h18M9 10v10" />
+  </>,
+);
+
+export const UserCheckIcon = make(
+  <>
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="m16 11 2 2 4-4" />
+  </>,
+);

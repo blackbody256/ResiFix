@@ -202,7 +202,7 @@ A request is open while it is the latest `visit.*` audit event for its visit, so
 | `ticketBreached(ticketId)` | the `response-deadline` job, when the respond time passes | the assignee (or every custodian if none), and the admins |
 | `ticketReopened(ticketId)` | PB-020, right after a resident reopens a ticket           | the assignee (or every custodian if none), and the admins |
 
-PB-005 and PB-020 should also call `ResponseTargetsService.startClock(ticketId)` (exported by `CustodianModule`), which sets `dueAt` and schedules the breach alert.
+PB-005 and PB-020 also call `ResponseTargetsService.startClock(ticketId)` (exported by `CustodianModule`), which sets `dueAt` and schedules the breach alert. `POST /reporting/tickets` does both (clock first, so the alert says when to respond by) and returns the ticket with its `dueAt`. A failure in either is logged, not returned: the ticket is already saved and an error would make the resident report it twice. PB-020 still has to make these calls when it reopens a ticket.
 
 ### Resident updates (PB-023)
 
