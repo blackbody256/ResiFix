@@ -55,6 +55,20 @@ describe('PB-029 category and response-target administration', () => {
       .expect(200);
     expect(renamed.body.category.name).toBe('Security and access');
 
+    const categoryAudit = await t.prisma.auditLog.findMany({
+      where: {
+        propertyId: home.property.id,
+        action: { in: ['fault_category.created', 'fault_category.renamed'] },
+      },
+      select: { action: true, actorId: true },
+    });
+    expect(categoryAudit).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: 'fault_category.created', actorId: home.admin.id }),
+        expect.objectContaining({ action: 'fault_category.renamed', actorId: home.admin.id }),
+      ]),
+    );
+
     const deleted = await t
       .as(home.admin)
       .delete(`/properties/fault-categories/${created.body.category.id}`)
@@ -80,6 +94,20 @@ describe('PB-029 category and response-target administration', () => {
       .send({ isActive: false, defaultPriority: Priority.HIGH })
       .expect(200);
     expect(updated.body.item).toMatchObject({ isActive: false, defaultPriority: Priority.HIGH });
+
+    const itemAudit = await t.prisma.auditLog.findMany({
+      where: {
+        propertyId: home.property.id,
+        action: { in: ['fault_item.created', 'fault_item.updated'] },
+      },
+      select: { action: true, actorId: true },
+    });
+    expect(itemAudit).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: 'fault_item.created', actorId: home.admin.id }),
+        expect.objectContaining({ action: 'fault_item.updated', actorId: home.admin.id }),
+      ]),
+    );
 
     await t
       .as(home.admin)
@@ -127,13 +155,27 @@ describe('PB-029 category and response-target administration', () => {
       .as(home.admin)
       .patch(`/properties/response-targets/${created.body.responseTarget.id}`)
       .send({
-        categoryId: home.categories.Plumbing.id,
         priority: Priority.LOW,
         respondWithinH: 24,
         resolveWithinH: 120,
       })
       .expect(200);
     expect(updated.body.responseTarget).toMatchObject({ respondWithinH: 24, resolveWithinH: 120 });
+    expect(updated.body.responseTarget.categoryId).toBe(home.categories.Plumbing.id);
+
+    const targetAudit = await t.prisma.auditLog.findMany({
+      where: {
+        propertyId: home.property.id,
+        action: { in: ['response_target.created', 'response_target.updated'] },
+      },
+      select: { action: true, actorId: true },
+    });
+    expect(targetAudit).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: 'response_target.created', actorId: home.admin.id }),
+        expect.objectContaining({ action: 'response_target.updated', actorId: home.admin.id }),
+      ]),
+    );
 
     await t
       .as(away.admin)

@@ -6,7 +6,9 @@ import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/commo
 import { Prisma, Priority, Role } from '@prisma/client';
 import { z } from 'zod';
 import { conflict, notFound } from '../common/app-exception';
-import { Roles, Scope } from '../common/decorators';
+import { CurrentUser, Roles, Scope } from '../common/decorators';
+import type { AuthUser } from '../auth/auth-user';
+import { AuditService } from '../common/audit.service';
 import type { PropertyScope } from '../common/property-scope';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../prisma/prisma.service';
@@ -37,7 +39,10 @@ const TargetBody = z.object({
 
 @Controller('properties')
 export class PropertiesController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   /** Working example of a scoped read. GET /api/properties/mine */
   @Get('mine')
@@ -73,6 +78,7 @@ export class PropertiesController {
   @Roles(Role.ADMIN)
   async createCategory(
     @Body(new ZodValidationPipe(CategoryBody)) body: z.infer<typeof CategoryBody>,
+    @CurrentUser() user: AuthUser,
     @Scope() scope: PropertyScope,
   ) {
     const existing = await this.prisma.faultCategory.findFirst({
@@ -80,8 +86,21 @@ export class PropertiesController {
     });
     if (existing) throw conflict('A fault category with this name already exists');
     try {
+      const category = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.faultCategory.create({ data: scope.data({ name: body.name }) });
+        await this.audit.record(
+          {
+            propertyId: scope.propertyId,
+            actorId: user.id,
+            action: 'fault_category.created',
+            meta: { categoryId: created.id, name: created.name },
+          },
+          tx,
+        );
+        return created;
+      });
       return {
-        category: await this.prisma.faultCategory.create({ data: scope.data({ name: body.name }) }),
+        category,
       };
     } catch (error) {
       if (isUniqueError(error)) throw conflict('A fault category with this name already exists');
@@ -94,20 +113,40 @@ export class PropertiesController {
   async renameCategory(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(CategoryBody)) body: z.infer<typeof CategoryBody>,
+    @CurrentUser() user: AuthUser,
     @Scope() scope: PropertyScope,
   ) {
-    const category = await this.prisma.faultCategory.findFirst({ where: scope.where({ id }) });
-    if (!category) throw notFound('Fault category not found');
+    const existingCategory = await this.prisma.faultCategory.findFirst({
+      where: scope.where({ id }),
+    });
+    if (!existingCategory) throw notFound('Fault category not found');
     const duplicate = await this.prisma.faultCategory.findFirst({
       where: scope.where({ name: body.name, id: { not: id } }),
     });
     if (duplicate) throw conflict('A fault category with this name already exists');
-    return { category: await this.prisma.faultCategory.update({ where: { id }, data: body }) };
+    const category = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.faultCategory.update({ where: { id }, data: body });
+      await this.audit.record(
+        {
+          propertyId: scope.propertyId,
+          actorId: user.id,
+          action: 'fault_category.renamed',
+          meta: { categoryId: id, from: existingCategory.name, to: body.name },
+        },
+        tx,
+      );
+      return updated;
+    });
+    return { category };
   }
 
   @Delete('fault-categories/:id')
   @Roles(Role.ADMIN)
-  async deleteCategory(@Param('id') id: string, @Scope() scope: PropertyScope) {
+  async deleteCategory(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Scope() scope: PropertyScope,
+  ) {
     const category = await this.prisma.faultCategory.findFirst({
       where: scope.where({ id }),
       include: { _count: { select: { items: true } } },
@@ -126,7 +165,18 @@ export class PropertiesController {
       throw conflict('This category has ticket history and cannot be deleted. Rename it instead.');
     }
 
-    await this.prisma.faultCategory.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.faultCategory.delete({ where: { id } });
+      await this.audit.record(
+        {
+          propertyId: scope.propertyId,
+          actorId: user.id,
+          action: 'fault_category.deleted',
+          meta: { categoryId: id, name: category.name },
+        },
+        tx,
+      );
+    });
     return { deleted: true, id };
   }
 
@@ -135,6 +185,7 @@ export class PropertiesController {
   async createItem(
     @Param('categoryId') categoryId: string,
     @Body(new ZodValidationPipe(ItemBody)) body: z.infer<typeof ItemBody>,
+    @CurrentUser() user: AuthUser,
     @Scope() scope: PropertyScope,
   ) {
     const category = await this.prisma.faultCategory.findFirst({
@@ -146,7 +197,20 @@ export class PropertiesController {
     });
     if (existing) throw conflict('A fault item with this name already exists in this category');
     try {
-      return { item: await this.prisma.faultItem.create({ data: { categoryId, ...body } }) };
+      const item = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.faultItem.create({ data: { categoryId, ...body } });
+        await this.audit.record(
+          {
+            propertyId: scope.propertyId,
+            actorId: user.id,
+            action: 'fault_item.created',
+            meta: { itemId: created.id, categoryId, name: created.name },
+          },
+          tx,
+        );
+        return created;
+      });
+      return { item };
     } catch (error) {
       if (isUniqueError(error))
         throw conflict('A fault item with this name already exists in this category');
@@ -159,35 +223,67 @@ export class PropertiesController {
   async updateItem(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(ItemUpdateBody)) body: z.infer<typeof ItemUpdateBody>,
+    @CurrentUser() user: AuthUser,
     @Scope() scope: PropertyScope,
   ) {
-    const item = await this.prisma.faultItem.findFirst({
+    const existingItem = await this.prisma.faultItem.findFirst({
       where: scope.where<Prisma.FaultItemWhereInput>({ id }, 'category'),
     });
-    if (!item) throw notFound('Fault item not found');
-    if (body.name && body.name !== item.name) {
+    if (!existingItem) throw notFound('Fault item not found');
+    if (body.name && body.name !== existingItem.name) {
       const duplicate = await this.prisma.faultItem.findFirst({
-        where: { categoryId: item.categoryId, name: body.name, id: { not: id } },
+        where: { categoryId: existingItem.categoryId, name: body.name, id: { not: id } },
       });
       if (duplicate) throw conflict('A fault item with this name already exists in this category');
     }
-    return { item: await this.prisma.faultItem.update({ where: { id }, data: body }) };
+    const item = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.faultItem.update({ where: { id }, data: body });
+      await this.audit.record(
+        {
+          propertyId: scope.propertyId,
+          actorId: user.id,
+          action: 'fault_item.updated',
+          meta: { itemId: id, categoryId: existingItem.categoryId, changes: body },
+        },
+        tx,
+      );
+      return updated;
+    });
+    return { item };
   }
 
   @Post('response-targets')
   @Roles(Role.ADMIN)
   async createTarget(
     @Body(new ZodValidationPipe(TargetBody)) body: z.infer<typeof TargetBody>,
+    @CurrentUser() user: AuthUser,
     @Scope() scope: PropertyScope,
   ) {
     await this.assertCategory(body.categoryId, scope);
     await this.assertTargetAvailable(body.categoryId ?? null, body.priority, scope);
     try {
-      return {
-        responseTarget: await this.prisma.responseTarget.create({
+      const responseTarget = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.responseTarget.create({
           data: scope.data({ ...body, categoryId: body.categoryId ?? null }),
-        }),
-      };
+        });
+        await this.audit.record(
+          {
+            propertyId: scope.propertyId,
+            actorId: user.id,
+            action: 'response_target.created',
+            meta: {
+              responseTargetId: created.id,
+              categoryId: created.categoryId,
+              priority: created.priority,
+              respondWithinH: created.respondWithinH,
+              resolveWithinH: created.resolveWithinH,
+            },
+          },
+          tx,
+        );
+        return created;
+      });
+      return { responseTarget };
     } catch (error) {
       if (isUniqueError(error))
         throw conflict('A response target already exists for this priority and category');
@@ -200,15 +296,37 @@ export class PropertiesController {
   async updateTarget(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(TargetBody)) body: z.infer<typeof TargetBody>,
+    @CurrentUser() user: AuthUser,
     @Scope() scope: PropertyScope,
   ) {
     const target = await this.prisma.responseTarget.findFirst({ where: scope.where({ id }) });
     if (!target) throw notFound('Response target not found');
-    await this.assertCategory(body.categoryId, scope);
-    await this.assertTargetAvailable(body.categoryId ?? null, body.priority, scope, id);
-    return {
-      responseTarget: await this.prisma.responseTarget.update({ where: { id }, data: body }),
-    };
+    const categoryId = body.categoryId === undefined ? target.categoryId : body.categoryId;
+    await this.assertCategory(categoryId, scope);
+    await this.assertTargetAvailable(categoryId, body.priority, scope, id);
+    const responseTarget = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.responseTarget.update({
+        where: { id },
+        data: { ...body, categoryId },
+      });
+      await this.audit.record(
+        {
+          propertyId: scope.propertyId,
+          actorId: user.id,
+          action: 'response_target.updated',
+          meta: {
+            responseTargetId: id,
+            categoryId: updated.categoryId,
+            priority: updated.priority,
+            respondWithinH: updated.respondWithinH,
+            resolveWithinH: updated.resolveWithinH,
+          },
+        },
+        tx,
+      );
+      return updated;
+    });
+    return { responseTarget };
   }
 
   private async assertCategory(categoryId: string | null | undefined, scope: PropertyScope) {
