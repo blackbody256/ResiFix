@@ -17,6 +17,7 @@ import { MINUTE_MS } from './response-targets';
 import { moveTicket, TicketActionsService, updateIfUnchanged } from './ticket-actions.service';
 import { describeTicket, TICKET_CONTEXT } from './ticket-context';
 import { WorkQueueService } from './work-queue.service';
+import { isAvailableAt } from './availability';
 
 const S = TicketStatus;
 const DAY_MS = 24 * 60 * MINUTE_MS;
@@ -155,7 +156,14 @@ export class VisitsService {
     }
     const custodian = await this.actions.custodian(custodianId, scope, 'custodianId');
 
-    // TODO(PB-008): once residents' availability is stored, refuse times outside it here.
+    if (ticket.roomId) {
+      const windows = await this.prisma.availabilityWindow.findMany({
+        where: { userId: ticket.reporterId },
+      });
+      if (windows.length > 0 && !isAvailableAt(input.scheduledAt, windows)) {
+        throw conflict('The requested time is outside the resident availability window');
+      }
+    }
 
     const visit = await this.prisma.$transaction(async (tx) => {
       const data = { assigneeId: ticket.assigneeId ?? custodian.id };

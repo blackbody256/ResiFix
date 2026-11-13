@@ -22,6 +22,10 @@ const CreateOccupancyBody = z.object({
   userId: z.string().trim().min(1),
   roomId: z.string().trim().min(1),
 });
+const CreateFacilityBody = z.object({
+  name: z.string().trim().min(1).max(100),
+  location: z.string().trim().max(200).nullable().optional(),
+});
 const CategoryBody = z.object({ name: z.string().trim().min(1).max(100) });
 const ItemBody = z.object({
   name: z.string().trim().min(1).max(100),
@@ -35,6 +39,9 @@ const TargetBody = z.object({
   priority: z.enum(Object.values(Priority) as [Priority, ...Priority[]]),
   respondWithinH: z.number().int().min(1).max(8760),
   resolveWithinH: z.number().int().min(1).max(8760),
+});
+const UpdateFacilityBody = CreateFacilityBody.partial().extend({
+  isActive: z.boolean().optional(),
 });
 
 @Controller('properties')
@@ -432,6 +439,54 @@ export class PropertiesController {
       data: { userId: user.id, roomId: room.id },
     });
     return { occupancy };
+  }
+
+  @Get('facilities')
+  async facilities(@Scope() scope: PropertyScope) {
+    const facilities = await this.prisma.facility.findMany({
+      where: { propertyId: scope.propertyId },
+      orderBy: { name: 'asc' },
+    });
+    return { facilities };
+  }
+
+  @Post('facilities')
+  @Roles(Role.ADMIN)
+  async createFacility(
+    @Body(new ZodValidationPipe(CreateFacilityBody)) body: z.infer<typeof CreateFacilityBody>,
+    @Scope() scope: PropertyScope,
+  ) {
+    try {
+      const facility = await this.prisma.facility.create({ data: scope.data(body) });
+      return { facility };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw conflict('A facility with this name already exists');
+      }
+      throw error;
+    }
+  }
+
+  @Patch('facilities/:id')
+  @Roles(Role.ADMIN)
+  async updateFacility(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateFacilityBody)) body: z.infer<typeof UpdateFacilityBody>,
+    @Scope() scope: PropertyScope,
+  ) {
+    const existing = await this.prisma.facility.findFirst({
+      where: { id, propertyId: scope.propertyId },
+    });
+    if (!existing) throw notFound('Facility not found');
+    try {
+      const facility = await this.prisma.facility.update({ where: { id }, data: body });
+      return { facility };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw conflict('A facility with this name already exists');
+      }
+      throw error;
+    }
   }
 }
 

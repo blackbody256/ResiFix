@@ -72,6 +72,7 @@ const PERSON = { select: { id: true, name: true } } as const;
 
 const QUEUE_INCLUDE = {
   room: { select: { id: true, number: true, block: { select: { id: true, name: true } } } },
+  facility: { select: { id: true, name: true, location: true } },
   faultItem: {
     select: { id: true, name: true, category: { select: { id: true, name: true } } },
   },
@@ -100,6 +101,7 @@ export interface QueueItem {
   createdAt: Date;
   reopenCount: number;
   room: QueueRow['room'];
+  facility: QueueRow['facility'];
   faultItem: QueueRow['faultItem'];
   assignee: { id: string; name: string } | null;
   photoCount: number;
@@ -156,7 +158,10 @@ export class WorkQueueService {
   }
 
   private filters(user: AuthUser, query: QueueQuery): Prisma.TicketWhereInput {
-    const and: Prisma.TicketWhereInput[] = [{ status: { in: query.status ?? [...OPEN_STATUSES] } }];
+    const and: Prisma.TicketWhereInput[] = [
+      { status: { in: query.status ?? [...OPEN_STATUSES] } },
+      { duplicatesOf: { none: {} } },
+    ];
     if (query.priority) and.push({ priority: { in: query.priority } });
     if (query.categoryId) and.push({ faultItem: { categoryId: query.categoryId } });
     if (query.blockId) and.push({ room: { blockId: query.blockId } });
@@ -171,6 +176,7 @@ export class WorkQueueService {
           { description: contains },
           { room: { number: contains } },
           { room: { block: { name: contains } } },
+          { facility: { name: contains } },
           { faultItem: { name: contains } },
           { faultItem: { category: { name: contains } } },
         ],
@@ -205,6 +211,7 @@ export class WorkQueueService {
         createdAt: row.createdAt,
         reopenCount: row.reopenCount,
         room: row.room,
+        facility: row.facility,
         faultItem: row.faultItem,
         assignee: row.assignee,
         photoCount: row._count.photos,

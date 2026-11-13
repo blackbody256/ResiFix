@@ -76,6 +76,27 @@ export class ResidentUpdatesService {
       ticketId: ticket.id,
       ...message,
     });
-    return [ticket.reporter.id];
+    const followers = await this.prisma.duplicateLink.findMany({
+      where: { canonicalId: ticket.id },
+      select: { ticketId: true, linkedBy: { select: { id: true, isActive: true } } },
+    });
+    await Promise.all(
+      followers
+        .filter((follower) => follower.linkedBy.isActive)
+        .map((follower) =>
+          this.notifications.notify({
+            userId: follower.linkedBy.id,
+            ticketId: follower.ticketId,
+            title: message.title,
+            body: `The shared repair you follow was updated: ${message.body}`,
+          }),
+        ),
+    );
+    return [
+      ticket.reporter.id,
+      ...followers
+        .filter((follower) => follower.linkedBy.isActive)
+        .map((follower) => follower.linkedBy.id),
+    ];
   }
 }

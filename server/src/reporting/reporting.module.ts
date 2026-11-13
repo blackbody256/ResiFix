@@ -4,6 +4,8 @@ import { CustodianModule } from '../custodian/custodian.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ReportingController } from './reporting.controller';
 
-// CustodianModule: the response clock (PB-012). NotificationsModule: custodian alerts (PB-024).
-@Module({ imports: [CustodianModule, NotificationsModule], controllers: [ReportingController] })
+@Module({
+  imports: [CustodianModule, NotificationsModule],
+  controllers: [ReportingController],
+})
 export class ReportingModule {}
